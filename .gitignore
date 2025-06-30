@@ -1,0 +1,24 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Node.js
+node_modules/
+.pnpm-store/
+package-lock.json
+yarn.lock
+
+# Turborepo
+.turbo/
+dist/
+build/
+.next/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# OS and editor files
+.DS_Store
+*.log
+.vscode/
+.idea/
