@@ -24,7 +24,9 @@ jobs:
          cache: 'pnpm'
 
      - name: Install pnpm
-       run: npm install -g pnpm
+       uses: pnpm/action-setup@v3
+       with:
+         version: 8 # Use your project's required version
 
      - name: Install dependencies
        run: pnpm install
@@ -45,7 +47,9 @@ jobs:
          cache: 'pnpm'
 
      - name: Install pnpm
-       run: npm install -g pnpm
+       uses: pnpm/action-setup@v3
+       with:
+         version: 8 # Use your project's required version
 
      - name: Install dependencies
        run: pnpm install
