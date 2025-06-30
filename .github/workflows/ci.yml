@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
+          #cache: 'pnpm'
 
       - name: Install pnpm (workaround for Ubuntu 24.04)
         run: npm install -g pnpm@8
@@ -29,7 +29,7 @@ jobs:
         run: pnpm run lint
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
+          #cache: 'pnpm'
 
       - name: Install pnpm (workaround for Ubuntu 24.04)
         run: npm install -g pnpm@8
