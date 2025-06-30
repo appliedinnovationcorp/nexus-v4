@@ -19,10 +19,8 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
+      - name: Install pnpm (workaround for Ubuntu 24.04)
+        run: npm install -g pnpm@8
 
       - name: Install dependencies
         run: pnpm install
@@ -42,10 +40,8 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
+      - name: Install pnpm (workaround for Ubuntu 24.04)
+        run: npm install -g pnpm@8
 
       - name: Install dependencies
         run: pnpm install
