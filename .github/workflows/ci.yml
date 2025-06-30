@@ -22,8 +22,10 @@ jobs:
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
-          export PATH="$(npm bin -g):$PATH"
-          echo "$(npm bin -g)" >> $GITHUB_PATH
+          ls -al $(npm bin -g)
+          export PNPM_HOME=$(npm bin -g)
+          echo "$PNPM_HOME" >> $GITHUB_PATH
+          export PATH="$PNPM_HOME:$PATH"
 
       - name: Check pnpm version
         run: pnpm --version || echo 'pnpm not found'
@@ -49,8 +51,11 @@ jobs:
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
-          export PATH="$(npm bin -g):$PATH"
-          echo "$(npm bin -g)" >> $GITHUB_PATH
+          ls -al $(npm bin -g)
+          export PNPM_HOME=$(npm bin -g)
+          echo "$PNPM_HOME" >> $GITHUB_PATH
+          export PATH="$PNPM_HOME:$PATH"
+          pnpm --version
 
       - name: Check pnpm version
         run: pnpm --version || echo 'pnpm not found'
