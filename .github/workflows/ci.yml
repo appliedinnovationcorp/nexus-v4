@@ -18,15 +18,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install pnpm and add to PATH
-        run: |
-          npm install -g pnpm@8
-          export PNPM_HOME=$(npm bin -g)
-          echo "$PNPM_HOME" >> $GITHUB_PATH
-          export PATH="$PNPM_HOME:$PATH"
+      - name: Install pnpm with corepack
+        run: corepack enable && corepack prepare pnpm@8.15.6 --activate
 
-      - name: Check pnpm version
-        run: pnpm --version || echo 'pnpm not found'
+      - name: Check pnpm version and path
+        run: |
+          pnpm --version
+          which pnpm
 
       - name: Add npm global bin to PATH
         run: echo "$(npm bin -g)" >> $GITHUB_PATH
