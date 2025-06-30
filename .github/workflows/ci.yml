@@ -1,64 +1,54 @@
 name: CI
 
 on:
- push:
-   branches:
-     - main
-     - dev
- pull_request:
-   branches:
-     - main
-     - dev
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
 
 jobs:
- lint:
-   runs-on: ubuntu-latest
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v4
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-     - name: Set up Node.js
-       uses: actions/setup-node@v4
-       with:
-         node-version: '20'
-#         cache: 'pnpm'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
 
-     - name: Install pnpm
-       uses: pnpm/action-setup@v3
-       with:
-         version: 8 # Use your project's required version
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
 
-     - name: Check pnpm version
-       run: pnpm --version || echo 'pnpm not found'
+      - name: Install dependencies
+        run: pnpm install
 
-     - name: Install dependencies
-       run: pnpm install
+      - name: Run lint
+        run: pnpm run lint
 
-     - name: Run lint
-       run: pnpm run lint
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
- build:
-   runs-on: ubuntu-latest
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
 
-     - name: Set up Node.js
-       uses: actions/setup-node@v4
-       with:
-         node-version: '20'
-#         cache: 'pnpm'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
 
-     - name: Install pnpm
-       uses: pnpm/action-setup@v3
-       with:
-         version: 8 # Use your project's required version
+      - name: Install dependencies
+        run: pnpm install
 
-     - name: Check pnpm version
-       run: pnpm --version || echo 'pnpm not found'
-
-     - name: Install dependencies
-       run: pnpm install
-
-     - name: Run build
-       run: pnpm run build
+      - name: Run build
+        run: pnpm run build
