@@ -28,6 +28,9 @@ jobs:
       - name: Check pnpm version
         run: pnpm --version || echo 'pnpm not found'
 
+      - name: Add npm global bin to PATH
+        run: echo "$(npm bin -g)" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: pnpm install
 
