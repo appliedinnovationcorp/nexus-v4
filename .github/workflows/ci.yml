@@ -24,7 +24,6 @@ jobs:
       - name: Check pnpm version and path
         run: |
           pnpm --version
-          which pnpm
 
       - name: Add npm global bin to PATH
         run: echo "$(npm bin -g)" >> $GITHUB_PATH
