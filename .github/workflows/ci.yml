@@ -19,8 +19,13 @@ jobs:
           node-version: '20'
           #cache: 'pnpm'
 
-      - name: Install pnpm (workaround for Ubuntu 24.04)
-        run: npm install -g pnpm@8
+      - name: Install pnpm and add to PATH
+        run: |
+          npm install -g pnpm@8
+          echo "$(npm bin -g)" >> $GITHUB_PATH
+
+      - name: Check pnpm version
+        run: pnpm --version || echo 'pnpm not found'
 
       - name: Install dependencies
         run: pnpm install
@@ -40,8 +45,13 @@ jobs:
           node-version: '20'
           #cache: 'pnpm'
 
-      - name: Install pnpm (workaround for Ubuntu 24.04)
-        run: npm install -g pnpm@8
+      - name: Install pnpm and add to PATH
+        run: |
+          npm install -g pnpm@8
+          echo "$(npm bin -g)" >> $GITHUB_PATH
+
+      - name: Check pnpm version
+        run: pnpm --version || echo 'pnpm not found'
 
       - name: Install dependencies
         run: pnpm install
