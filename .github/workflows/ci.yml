@@ -22,6 +22,7 @@ jobs:
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
+          export PATH="$(npm bin -g):$PATH"
           echo "$(npm bin -g)" >> $GITHUB_PATH
 
       - name: Check pnpm version
@@ -48,6 +49,7 @@ jobs:
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
+          export PATH="$(npm bin -g):$PATH"
           echo "$(npm bin -g)" >> $GITHUB_PATH
 
       - name: Check pnpm version
