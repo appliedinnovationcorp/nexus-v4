@@ -18,10 +18,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Find pnpm path
+        run: which pnpm
+
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
-          ls -al $(npm bin -g)
           export PNPM_HOME=$(npm bin -g)
           echo "$PNPM_HOME" >> $GITHUB_PATH
           export PATH="$PNPM_HOME:$PATH"
@@ -49,7 +51,6 @@ jobs:
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
-          ls -al $(npm bin -g)
           export PNPM_HOME=$(npm bin -g)
           echo "$PNPM_HOME" >> $GITHUB_PATH
           export PATH="$PNPM_HOME:$PATH"
