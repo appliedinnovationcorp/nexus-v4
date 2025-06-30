@@ -1,6 +1,7 @@
 # Turborepo starter
 
 This Turborepo starter is maintained by the Turborepo core team.
+[![CI](https://github.com/appliedinnovationcorp/nexus-v4/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/my-web-app/actions/workflows/ci.yml)
 
 ## Using this example
 
