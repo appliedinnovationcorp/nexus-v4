@@ -18,9 +18,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Find pnpm path
-        run: which pnpm
-
       - name: Install pnpm and add to PATH
         run: |
           npm install -g pnpm@8
