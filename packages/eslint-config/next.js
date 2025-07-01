@@ -28,6 +28,20 @@ module.exports = {
     // Import rules for Next.js
     'import/no-default-export': 'off', // Next.js requires default exports for pages
 
+    // Development vs Production console rules
+    'no-console': process.env.NODE_ENV === 'production' ? 'error' : 'warn',
+
+    // TypeScript adjustments for Next.js
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      },
+    ],
+
     // Performance optimizations
     'jsx-a11y/anchor-is-valid': [
       'error',
@@ -40,7 +54,16 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['pages/**/*.tsx', 'pages/**/*.ts', 'app/**/*.tsx', 'app/**/*.ts'],
+      files: [
+        'pages/**/*.tsx',
+        'pages/**/*.ts',
+        'app/**/*.tsx',
+        'app/**/*.ts',
+        'src/app/**/*.tsx',
+        'src/app/**/*.ts',
+        'src/pages/**/*.tsx',
+        'src/pages/**/*.ts',
+      ],
       rules: {
         // Page and layout specific rules
         'import/no-default-export': 'off',
@@ -48,10 +71,11 @@ module.exports = {
       },
     },
     {
-      files: ['next.config.js', 'next.config.ts'],
+      files: ['next.config.js', 'next.config.ts', 'next.config.mjs'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
         'no-console': 'off',
+        'import/no-default-export': 'off',
       },
     },
     {
@@ -61,10 +85,11 @@ module.exports = {
       },
     },
     {
-      files: ['**/*.test.tsx', '**/*.spec.tsx'],
+      files: ['**/*.test.tsx', '**/*.spec.tsx', '**/*.test.ts', '**/*.spec.ts'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'off',
         'jsx-a11y/no-autofocus': 'off',
+        'no-console': 'off',
       },
     },
   ],

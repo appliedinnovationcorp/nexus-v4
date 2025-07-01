@@ -1,6 +1,6 @@
 /**
  * Root ESLint configuration for Nexus workspace
- * Uses shared configuration from @nexus/eslint-config
+ * Uses shared configurations from @nexus/eslint-config
  */
 
 module.exports = {
@@ -18,29 +18,26 @@ module.exports = {
   ],
   overrides: [
     {
+      // Next.js frontend application
       files: ['apps/frontend/**/*'],
       extends: ['@nexus/eslint-config/next'],
     },
     {
+      // NestJS backend service
       files: ['services/backend/**/*'],
       extends: ['@nexus/eslint-config/node'],
     },
     {
+      // Shared packages with strict TypeScript
       files: ['packages/**/*'],
       extends: ['@nexus/eslint-config/typescript'],
     },
     {
+      // Build and automation scripts
       files: ['scripts/**/*'],
       extends: ['@nexus/eslint-config/node'],
       rules: {
         'no-console': 'off',
-      },
-    },
-    {
-      files: ['turbo.json', '*.config.js', '*.config.ts'],
-      rules: {
-        'no-console': 'off',
-        '@typescript-eslint/no-var-requires': 'off',
       },
     },
   ],

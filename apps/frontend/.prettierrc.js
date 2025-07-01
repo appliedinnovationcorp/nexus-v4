@@ -1,24 +1,6 @@
 /**
  * Prettier configuration for Next.js frontend
- * Uses shared configuration with JSX-specific settings
+ * Uses shared configuration from @nexus/prettier-config
  */
 
-const baseConfig = require('@nexus/prettier-config');
-
-module.exports = {
-  ...baseConfig,
-  // JSX-specific overrides
-  jsxSingleQuote: false,
-
-  // Additional overrides for React/JSX files
-  overrides: [
-    ...baseConfig.overrides,
-    {
-      files: ['*.jsx', '*.tsx'],
-      options: {
-        jsxSingleQuote: false,
-        printWidth: 100,
-      },
-    },
-  ],
-};
+module.exports = require('@nexus/prettier-config');
