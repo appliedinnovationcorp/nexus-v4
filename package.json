@@ -7,6 +7,9 @@
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
+    "lint:fix": "turbo lint:fix",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,json,md,yaml,yml}\"",
     "dev": "turbo dev",
     "clean": "turbo clean",
     "type-check": "turbo type-check",
@@ -22,6 +25,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.11.1",
   "devDependencies": {
+    "eslint": "^9.30.0",
+    "prettier": "^3.4.2",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
   },

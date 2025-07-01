@@ -1,6 +1,7 @@
 # Nexus Frontend Application
 
-A modern Next.js frontend application built with TypeScript, Tailwind CSS, and the App Router, designed for the Nexus workspace.
+A modern Next.js frontend application built with TypeScript, Tailwind CSS, and
+the App Router, designed for the Nexus workspace.
 
 ## Features
 
@@ -16,6 +17,7 @@ A modern Next.js frontend application built with TypeScript, Tailwind CSS, and t
 ## Quick Start
 
 ### Development
+
 ```bash
 # Install dependencies
 pnpm install
@@ -31,6 +33,7 @@ pnpm run start
 ```
 
 ### Docker
+
 ```bash
 # Build Docker image
 docker build -t nexus-frontend .
@@ -76,21 +79,27 @@ src/
 ## Key Components
 
 ### ApiStatus
+
 Real-time API health monitoring component that:
+
 - Checks backend API availability
 - Displays connection status with visual indicators
 - Shows response time metrics
 - Auto-refreshes every 30 seconds
 
 ### FeatureCard
+
 Reusable card component for showcasing features:
+
 - Clean, modern design
 - Icon and text support
 - Hover effects and animations
 - Responsive layout
 
 ### API Client
+
 Comprehensive API client with:
+
 - TypeScript support
 - Request/response typing
 - Timeout handling
@@ -128,7 +137,8 @@ The application demonstrates:
 
 ## API Integration
 
-The frontend connects to the NestJS backend at `http://localhost:3001/api` by default. Key endpoints:
+The frontend connects to the NestJS backend at `http://localhost:3001/api` by
+default. Key endpoints:
 
 - `GET /` - Welcome message
 - `GET /health` - Comprehensive health check
@@ -138,19 +148,23 @@ The frontend connects to the NestJS backend at `http://localhost:3001/api` by de
 ## Deployment
 
 ### Production Build
+
 ```bash
 pnpm run build
 pnpm run start
 ```
 
 ### Docker Deployment
+
 ```bash
 docker build -t nexus-frontend .
 docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=https://your-api.com nexus-frontend
 ```
 
 ### Environment Variables
+
 Set these for production:
+
 - `NEXT_PUBLIC_API_URL` - Backend API URL
 - `NEXT_PUBLIC_APP_NAME` - Application name
 - `NODE_ENV=production` - Production mode

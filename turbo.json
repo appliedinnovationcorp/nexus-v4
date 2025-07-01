@@ -10,6 +10,17 @@
       "outputs": ["coverage/**"]
     },
     "lint": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "lint:fix": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "format": {
+      "outputs": []
+    },
+    "format:check": {
       "outputs": []
     },
     "dev": {
@@ -29,6 +40,9 @@
     "pnpm-workspace.yaml",
     "turbo.json",
     ".env",
-    ".env.local"
+    ".env.local",
+    ".eslintrc.js",
+    ".prettierrc.js",
+    ".prettierignore"
   ]
 }

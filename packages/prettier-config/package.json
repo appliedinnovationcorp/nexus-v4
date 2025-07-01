@@ -1,0 +1,21 @@
+{
+  "name": "@nexus/prettier-config",
+  "version": "1.0.0",
+  "description": "Shared Prettier configuration for Nexus workspace",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "prettier",
+    "prettier-config",
+    "formatting"
+  ],
+  "license": "ISC",
+  "peerDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}

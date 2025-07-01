@@ -1,6 +1,7 @@
 # Nexus Workspace v4
 
-A comprehensive pnpm workspace with organized directory structure for scalable development.
+A comprehensive pnpm workspace with organized directory structure for scalable
+development.
 
 ## Workspace Structure
 
@@ -26,16 +27,19 @@ A comprehensive pnpm workspace with organized directory structure for scalable d
 ## Getting Started
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
 
 2. Build all packages:
+
    ```bash
    pnpm build
    ```
 
 3. Run tests:
+
    ```bash
    pnpm test
    ```
@@ -67,7 +71,8 @@ To add a new package to any workspace directory:
 
 ## Workspace Configuration
 
-The workspace is configured in `pnpm-workspace.yaml` with all directory patterns included.
+The workspace is configured in `pnpm-workspace.yaml` with all directory patterns
+included.
 
 ## Requirements
 

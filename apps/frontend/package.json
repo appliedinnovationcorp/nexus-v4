@@ -8,6 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,json,md}\"",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf .next"
   },

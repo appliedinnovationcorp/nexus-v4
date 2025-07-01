@@ -4,7 +4,8 @@ import { FeatureCard } from '../components/FeatureCard';
 
 export const metadata: Metadata = {
   title: 'Nexus Frontend - Modern Full-Stack Application',
-  description: 'A comprehensive Next.js frontend built with TypeScript, Tailwind CSS, and modern best practices.',
+  description:
+    'A comprehensive Next.js frontend built with TypeScript, Tailwind CSS, and modern best practices.',
 };
 
 export default function HomePage() {
@@ -29,12 +30,10 @@ export default function HomePage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Hero Section */}
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Welcome to Nexus Workspace
-          </h2>
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">Welcome to Nexus Workspace</h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            A modern full-stack application built with Next.js, NestJS, TypeScript, and Tailwind CSS.
-            Experience the power of a well-architected monorepo workspace.
+            A modern full-stack application built with Next.js, NestJS, TypeScript, and Tailwind
+            CSS. Experience the power of a well-architected monorepo workspace.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
@@ -82,9 +81,7 @@ export default function HomePage() {
 
         {/* Tech Stack */}
         <div className="bg-white rounded-xl shadow-sm p-8">
-          <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            Technology Stack
-          </h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Technology Stack</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
             {[
               { name: 'Next.js', color: 'bg-black' },
@@ -93,12 +90,12 @@ export default function HomePage() {
               { name: 'Tailwind', color: 'bg-cyan-500' },
               { name: 'NestJS', color: 'bg-red-500' },
               { name: 'pnpm', color: 'bg-orange-500' },
-            ].map((tech) => (
+            ].map(tech => (
               <div key={tech.name} className="text-center">
-                <div className={`${tech.color} w-12 h-12 rounded-lg mx-auto mb-2 flex items-center justify-center`}>
-                  <span className="text-white font-bold text-sm">
-                    {tech.name.charAt(0)}
-                  </span>
+                <div
+                  className={`${tech.color} w-12 h-12 rounded-lg mx-auto mb-2 flex items-center justify-center`}
+                >
+                  <span className="text-white font-bold text-sm">{tech.name.charAt(0)}</span>
                 </div>
                 <span className="text-sm font-medium text-gray-700">{tech.name}</span>
               </div>

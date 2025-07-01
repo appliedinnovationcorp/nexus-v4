@@ -16,6 +16,7 @@ A robust NestJS backend service built for the Nexus workspace with modern featur
 ## Quick Start
 
 ### Development
+
 ```bash
 # Install dependencies
 pnpm install
@@ -31,6 +32,7 @@ pnpm run start:prod
 ```
 
 ### Docker
+
 ```bash
 # Build Docker image
 docker build -t nexus-backend .
@@ -42,6 +44,7 @@ docker run -p 3001:3000 nexus-backend
 ## API Documentation
 
 Once the server is running, visit:
+
 - **Swagger UI**: http://localhost:3001/api/docs
 - **Health Check**: http://localhost:3001/api/health
 - **Ready Check**: http://localhost:3001/api/health/ready
@@ -106,6 +109,7 @@ The service includes comprehensive health checks:
 ## Deployment
 
 The service is containerized and ready for deployment to:
+
 - Docker containers
 - Kubernetes clusters
 - Cloud platforms (AWS, GCP, Azure)

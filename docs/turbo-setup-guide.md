@@ -1,11 +1,14 @@
 # Turbo Setup Guide
 
 ## Overview
-Turbo has been configured to optimize build performance across the workspace with intelligent caching and task orchestration.
+
+Turbo has been configured to optimize build performance across the workspace
+with intelligent caching and task orchestration.
 
 ## Configuration
 
 ### Pipeline Tasks
+
 - **build**: Builds packages with dependency ordering
 - **test**: Runs tests after build completion
 - **lint**: Lints code without dependencies
@@ -14,6 +17,7 @@ Turbo has been configured to optimize build performance across the workspace wit
 - **type-check**: TypeScript type checking
 
 ### Key Features
+
 - **Dependency Graph**: Tasks run in correct order based on dependencies
 - **Incremental Builds**: Only rebuilds changed packages
 - **Remote Caching**: Can be configured for team sharing
@@ -59,6 +63,7 @@ When creating new packages, add these scripts to their `package.json`:
 ```
 
 ## Performance Benefits
+
 - **Caching**: Turbo caches task outputs and skips unchanged work
 - **Parallelization**: Runs tasks across CPU cores efficiently
 - **Dependency Awareness**: Ensures correct build order automatically

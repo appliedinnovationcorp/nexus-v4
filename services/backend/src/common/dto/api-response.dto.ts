@@ -13,7 +13,12 @@ export class ApiResponseDto<T = any> {
   @ApiPropertyOptional({ description: 'Error messages', type: [String] })
   errors?: string[];
 
-  constructor(data: T, success: boolean = true, message?: string, errors?: string[]) {
+  constructor(
+    data: T,
+    success: boolean = true,
+    message?: string,
+    errors?: string[],
+  ) {
     this.data = data;
     this.success = success;
     this.message = message;
@@ -32,7 +37,12 @@ export class PaginatedResponseDto<T = any> extends ApiResponseDto<T[]> {
 
   constructor(
     data: T[],
-    pagination: { page: number; limit: number; total: number; totalPages: number },
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    },
     message?: string,
   ) {
     super(data, true, message);

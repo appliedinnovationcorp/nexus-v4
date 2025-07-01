@@ -15,7 +15,7 @@ export function ApiStatus({ className = '' }: ApiStatusProps) {
       try {
         const startTime = Date.now();
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-        
+
         const response = await fetch(`${apiUrl}/health/ready`, {
           method: 'GET',
           headers: {
@@ -75,9 +75,7 @@ export function ApiStatus({ className = '' }: ApiStatusProps) {
   return (
     <div className={`flex items-center space-x-2 ${className}`}>
       <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
-      <span className="text-sm font-medium text-gray-700">
-        {getStatusText()}
-      </span>
+      <span className="text-sm font-medium text-gray-700">{getStatusText()}</span>
     </div>
   );
 }

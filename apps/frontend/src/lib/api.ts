@@ -26,12 +26,9 @@ class ApiClient {
     this.timeout = timeout;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -55,14 +52,14 @@ class ApiClient {
       return data;
     } catch (error) {
       clearTimeout(timeoutId);
-      
+
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           throw new Error('Request timeout');
         }
         throw error;
       }
-      
+
       throw new Error('Unknown error occurred');
     }
   }

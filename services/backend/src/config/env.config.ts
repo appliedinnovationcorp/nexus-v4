@@ -30,7 +30,8 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  JWT_SECRET: string = 'dda1b89507fd4faba1ba488380129ff48820e4cbe02cd484e023a1800d0f5a36';
+  JWT_SECRET: string =
+    'dda1b89507fd4faba1ba488380129ff48820e4cbe02cd484e023a1800d0f5a36';
 
   @IsNumber()
   @IsOptional()
