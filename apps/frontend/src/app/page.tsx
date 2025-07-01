@@ -1,4 +1,6 @@
 import { Metadata } from 'next';
+import Link from 'next/link';
+import { Button } from '@nexus/ui';
 import { ApiStatus } from '../components/ApiStatus';
 import { FeatureCard } from '../components/FeatureCard';
 
@@ -21,7 +23,14 @@ export default function HomePage() {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Nexus Frontend</h1>
             </div>
-            <ApiStatus />
+            <div className="flex items-center space-x-4">
+              <Link href="/ui-demo">
+                <Button variant="outline" size="sm">
+                  UI Demo
+                </Button>
+              </Link>
+              <ApiStatus />
+            </div>
           </div>
         </div>
       </header>
@@ -33,15 +42,16 @@ export default function HomePage() {
           <h2 className="text-4xl font-bold text-gray-900 mb-4">Welcome to Nexus Workspace</h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
             A modern full-stack application built with Next.js, NestJS, TypeScript, and Tailwind
-            CSS. Experience the power of a well-architected monorepo workspace.
+            CSS. Experience the power of a well-architected monorepo workspace with shared UI
+            components.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
+            <Button variant="primary" size="lg">
               Get Started
-            </button>
-            <button className="border border-gray-300 hover:border-gray-400 text-gray-700 px-8 py-3 rounded-lg font-semibold transition-colors">
+            </Button>
+            <Button variant="outline" size="lg">
               View Documentation
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -63,6 +73,11 @@ export default function HomePage() {
             icon="🎨"
           />
           <FeatureCard
+            title="Shared UI Components"
+            description="Centralized UI component library (@nexus/ui) with consistent design system, accessibility, and TypeScript support."
+            icon="🧩"
+          />
+          <FeatureCard
             title="NestJS Backend"
             description="Robust backend API built with NestJS, featuring health checks, Swagger documentation, and production-ready configuration."
             icon="🚀"
@@ -72,11 +87,30 @@ export default function HomePage() {
             description="Organized pnpm workspace with Turbo for efficient builds, shared packages, and scalable development."
             icon="📦"
           />
-          <FeatureCard
-            title="Production Ready"
-            description="Docker containerization, environment configuration, health monitoring, and deployment-ready setup."
-            icon="🏗️"
-          />
+        </div>
+
+        {/* UI Components Showcase */}
+        <div className="bg-white rounded-xl shadow-sm p-8 mb-16">
+          <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+            Shared UI Components
+          </h3>
+          <p className="text-gray-600 text-center mb-8">
+            Explore our centralized component library with consistent design and accessibility
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 mb-6">
+            <Button variant="primary">Primary Button</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="outline">Outline</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button loading>Loading</Button>
+          </div>
+          <div className="text-center">
+            <Link href="/ui-demo">
+              <Button variant="outline" rightIcon={<ArrowRightIcon />}>
+                View All Components
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Tech Stack */}
@@ -113,5 +147,14 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+// Simple arrow icon component
+function ArrowRightIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
   );
 }
