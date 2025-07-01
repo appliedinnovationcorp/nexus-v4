@@ -5,7 +5,7 @@
 
 module.exports = {
   root: true,
-  extends: ['@nexus/eslint-config'],
+  extends: ['@nexus/eslint-config', '@nexus/eslint-config/turbo'],
   ignorePatterns: [
     'node_modules/',
     'dist/',
@@ -19,7 +19,7 @@ module.exports = {
   overrides: [
     {
       files: ['apps/frontend/**/*'],
-      extends: ['@nexus/eslint-config/react'],
+      extends: ['@nexus/eslint-config/next'],
     },
     {
       files: ['services/backend/**/*'],
@@ -34,6 +34,13 @@ module.exports = {
       extends: ['@nexus/eslint-config/node'],
       rules: {
         'no-console': 'off',
+      },
+    },
+    {
+      files: ['turbo.json', '*.config.js', '*.config.ts'],
+      rules: {
+        'no-console': 'off',
+        '@typescript-eslint/no-var-requires': 'off',
       },
     },
   ],
