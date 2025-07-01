@@ -1,0 +1,28 @@
+{
+  "name": "nexus-workspace-v4",
+  "version": "1.0.0",
+  "description": "Nexus workspace with comprehensive pnpm workspace structure",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "dev": "pnpm -r dev",
+    "clean": "pnpm -r clean",
+    "install:all": "pnpm install",
+    "update:all": "pnpm -r update"
+  },
+  "keywords": [
+    "workspace",
+    "monorepo",
+    "pnpm"
+  ],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.11.1",
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
