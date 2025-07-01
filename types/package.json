@@ -1,0 +1,12 @@
+{
+  "name": "@nexus/types",
+  "version": "1.0.0",
+  "description": "Shared TypeScript type definitions",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["types", "typescript", "shared"],
+  "license": "ISC"
+}
