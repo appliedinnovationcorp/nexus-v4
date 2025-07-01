@@ -1,20 +1,16 @@
 # =============================================================================
 # Multi-stage Dockerfile for Next.js Frontend Application
 # =============================================================================
-# This Dockerfile creates a lean, secure production image for the Next.js app
-# with proper layer caching, security hardening, and minimal attack surface.
+# Builder stage for dependencies and compilation, minimal Alpine runtime stage
+# Uses Next.js standalone output for optimal production deployment
 
 # =============================================================================
-# Stage 1: Base Dependencies
+# Stage 1: Builder - Install dependencies and build the application
 # =============================================================================
-FROM node:20-alpine AS base
+FROM node:20-alpine AS builder
 
-# Install security updates and required packages
-RUN apk update && apk upgrade && \
-    apk add --no-cache \
-    libc6-compat \
-    dumb-init && \
-    rm -rf /var/cache/apk/*
+# Install build dependencies
+RUN apk add --no-cache libc6-compat
 
 # Set working directory
 WORKDIR /app
@@ -24,73 +20,47 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# Copy package manager files
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-
-# =============================================================================
-# Stage 2: Dependencies Installation
-# =============================================================================
-FROM base AS deps
-
-# Copy workspace configuration
+# Copy package files for dependency installation
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-utils/package.json ./packages/shared-utils/
-COPY packages/shared-database/package.json ./packages/shared-database/
 COPY packages/ui/package.json ./packages/ui/
 COPY configs/eslint-config/package.json ./configs/eslint-config/
 COPY configs/prettier-config/package.json ./configs/prettier-config/
-COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies with frozen lockfile for reproducible builds
+# Install all dependencies (including devDependencies for building)
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prefer-offline
+    pnpm install --frozen-lockfile
 
-# =============================================================================
-# Stage 3: Build Shared Packages
-# =============================================================================
-FROM deps AS shared-builder
+# Copy shared packages source code and build them
+COPY packages/ ./packages/
+COPY configs/ ./configs/
 
-# Copy shared package source code
-COPY packages/shared-types ./packages/shared-types
-COPY packages/shared-utils ./packages/shared-utils
-COPY packages/shared-database ./packages/shared-database
-COPY packages/ui ./packages/ui
-COPY configs/eslint-config ./configs/eslint-config
-COPY configs/prettier-config ./configs/prettier-config
-
-# Build shared packages
+# Build shared packages in dependency order
 RUN pnpm --filter "@nexus/shared-types" build
 RUN pnpm --filter "@nexus/shared-utils" build
 RUN pnpm --filter "@nexus/ui" build
 
-# =============================================================================
-# Stage 4: Application Builder
-# =============================================================================
-FROM shared-builder AS builder
-
-# Copy application source code
+# Copy frontend source code
 COPY apps/frontend ./apps/frontend
 
 # Set build environment variables
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Build the Next.js application
+# Build the Next.js application with standalone output
 RUN pnpm --filter "@nexus/frontend" build
 
 # =============================================================================
-# Stage 5: Production Runtime
+# Stage 2: Runtime - Minimal Alpine image with standalone output
 # =============================================================================
-FROM node:20-alpine AS runner
+FROM node:20-alpine AS runtime
 
-# Install security updates and runtime dependencies
-RUN apk update && apk upgrade && \
-    apk add --no-cache \
-    dumb-init \
-    tini && \
-    rm -rf /var/cache/apk/*
+# Install runtime dependencies
+RUN apk add --no-cache dumb-init tini curl
 
-# Create non-root user for security
+# Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
@@ -103,14 +73,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Copy built application from builder stage
+# Copy standalone output from builder stage
 COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/static ./apps/frontend/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/public ./apps/frontend/public
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /app/.next/cache && \
-    chown -R nextjs:nodejs /app/.next/cache
+# Create cache directory with proper permissions
+RUN mkdir -p .next/cache && \
+    chown -R nextjs:nodejs .next/cache
 
 # Switch to non-root user
 USER nextjs
@@ -119,23 +89,11 @@ USER nextjs
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Use tini as init system for proper signal handling
+# Use tini as init system
 ENTRYPOINT ["tini", "--"]
 
-# Start the application
+# Start the application using the standalone server
 CMD ["node", "apps/frontend/server.js"]
-
-# =============================================================================
-# Metadata and Labels
-# =============================================================================
-LABEL maintainer="Nexus Team <team@nexus.local>"
-LABEL description="Next.js Frontend Application for Nexus Workspace"
-LABEL version="1.0.0"
-LABEL org.opencontainers.image.title="Nexus Frontend"
-LABEL org.opencontainers.image.description="Production-ready Next.js frontend application"
-LABEL org.opencontainers.image.vendor="Nexus"
-LABEL org.opencontainers.image.licenses="ISC"
-LABEL org.opencontainers.image.source="https://github.com/appliedinnovationcorp/nexus-v4"
