@@ -4,11 +4,12 @@
   "description": "Nexus workspace with comprehensive pnpm workspace structure",
   "private": true,
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
-    "dev": "pnpm -r dev",
-    "clean": "pnpm -r clean",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "dev": "turbo dev",
+    "clean": "turbo clean",
+    "type-check": "turbo type-check",
     "install:all": "pnpm install",
     "update:all": "pnpm -r update"
   },
@@ -20,7 +21,9 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.11.1",
-  "devDependencies": {},
+  "devDependencies": {
+    "turbo": "^2.5.4"
+  },
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"

@@ -47,11 +47,12 @@ A comprehensive pnpm workspace with organized directory structure for scalable d
 
 ## Available Scripts
 
-- `pnpm build` - Build all packages
-- `pnpm test` - Run tests in all packages
-- `pnpm lint` - Lint all packages
-- `pnpm dev` - Start development mode
-- `pnpm clean` - Clean all packages
+- `pnpm build` - Build all packages (powered by Turbo)
+- `pnpm test` - Run tests in all packages (powered by Turbo)
+- `pnpm lint` - Lint all packages (powered by Turbo)
+- `pnpm dev` - Start development mode (powered by Turbo)
+- `pnpm clean` - Clean all packages (powered by Turbo)
+- `pnpm type-check` - Type check all packages (powered by Turbo)
 - `pnpm install:all` - Install all dependencies
 - `pnpm update:all` - Update all dependencies
 
