@@ -1,0 +1,43 @@
+version: '3.8'
+
+# =============================================================================
+# Docker Compose for Backend Service Development and Testing
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: services/backend/Dockerfile
+    image: nexus/backend:latest
+    container_name: nexus-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL:-postgresql://nexus_user:nexus_password@host.docker.internal:5432/nexus_dev}
+      - MONGODB_URL=${MONGODB_URL:-mongodb://admin:admin_password@host.docker.internal:27017/nexus_nosql?authSource=admin}
+      - REDIS_URL=${REDIS_URL:-redis://:redis_password@host.docker.internal:6379}
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+      - SESSION_SECRET=${SESSION_SECRET:-your-super-secret-session-key}
+    volumes:
+      - backend-logs:/app/logs
+      - backend-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - backend-network
+
+volumes:
+  backend-logs:
+  backend-uploads:
+
+networks:
+  backend-network:
+    driver: bridge
