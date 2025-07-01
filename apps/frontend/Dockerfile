@@ -7,7 +7,7 @@
 # =============================================================================
 # Stage 1: Builder - Install dependencies and build the application
 # =============================================================================
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache libc6-compat
@@ -55,7 +55,7 @@ RUN pnpm --filter "@nexus/frontend" build
 # =============================================================================
 # Stage 2: Runtime - Minimal Alpine image with standalone output
 # =============================================================================
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache dumb-init tini curl
