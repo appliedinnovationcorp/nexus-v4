@@ -46,16 +46,18 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
   
   // Relations
-  profile     UserProfile?
-  sessions    UserSession[]
-  posts       Post[]
-  comments    Comment[]
-  likes       Like[]
-  follows     Follow[]     @relation("UserFollows")
-  followers   Follow[]     @relation("UserFollowers")
-  pageViews   PageView[]
-  activities  Activity[]
-  files       File[]
+  profile       UserProfile?
+  refreshTokens RefreshToken[]
+  passwordResets PasswordReset[]
+  sessions      UserSession[]
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  follows       Follow[]     @relation("UserFollows")
+  followers     Follow[]     @relation("UserFollowers")
+  pageViews     PageView[]
+  activities    Activity[]
+  files         File[]
   
   @@map("users")
 }
@@ -92,6 +94,42 @@ model UserProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("user_profiles")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  
+  // Token metadata
+  userAgent String? @map("user_agent")
+  ipAddress String? @map("ip_address")
+  
+  // Token lifecycle
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  
+  // Reset lifecycle
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("password_resets")
 }
 
 model UserSession {
