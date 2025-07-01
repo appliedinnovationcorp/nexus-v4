@@ -24,6 +24,11 @@ export default function HomePage() {
               <h1 className="text-2xl font-bold text-gray-900">Nexus Frontend</h1>
             </div>
             <div className="flex items-center space-x-4">
+              <Link href="/integration-demo">
+                <Button variant="primary" size="sm">
+                  Integration Demo
+                </Button>
+              </Link>
               <Link href="/ui-demo">
                 <Button variant="outline" size="sm">
                   UI Demo
@@ -43,12 +48,14 @@ export default function HomePage() {
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
             A modern full-stack application built with Next.js, NestJS, TypeScript, and Tailwind
             CSS. Experience the power of a well-architected monorepo workspace with shared UI
-            components.
+            components, types, and utilities.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button variant="primary" size="lg">
-              Get Started
-            </Button>
+            <Link href="/integration-demo">
+              <Button variant="primary" size="lg" rightIcon={<IntegrationIcon />}>
+                View Integration Demo
+              </Button>
+            </Link>
             <Button variant="outline" size="lg">
               View Documentation
             </Button>
@@ -73,9 +80,9 @@ export default function HomePage() {
             icon="🎨"
           />
           <FeatureCard
-            title="Shared UI Components"
-            description="Centralized UI component library (@nexus/ui) with consistent design system, accessibility, and TypeScript support."
-            icon="🧩"
+            title="Shared Packages"
+            description="Centralized UI components (@nexus/ui), shared types (@nexus/shared-types), and utilities (@nexus/shared-utils) for consistent development."
+            icon="📦"
           />
           <FeatureCard
             title="NestJS Backend"
@@ -85,29 +92,65 @@ export default function HomePage() {
           <FeatureCard
             title="Monorepo Workspace"
             description="Organized pnpm workspace with Turbo for efficient builds, shared packages, and scalable development."
-            icon="📦"
+            icon="🏗️"
           />
         </div>
 
-        {/* UI Components Showcase */}
+        {/* Shared Packages Showcase */}
         <div className="bg-white rounded-xl shadow-sm p-8 mb-16">
           <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-            Shared UI Components
+            Shared Package Ecosystem
           </h3>
           <p className="text-gray-600 text-center mb-8">
-            Explore our centralized component library with consistent design and accessibility
+            Experience true monorepo benefits with shared code across all applications
           </p>
-          <div className="flex flex-wrap justify-center gap-4 mb-6">
-            <Button variant="primary">Primary Button</Button>
-            <Button variant="secondary">Secondary</Button>
-            <Button variant="outline">Outline</Button>
-            <Button variant="ghost">Ghost</Button>
-            <Button loading>Loading</Button>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="text-center p-6 bg-blue-50 rounded-lg">
+              <div className="w-12 h-12 bg-blue-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">UI</span>
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-2">@nexus/ui</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                Shared UI components with consistent design system and accessibility
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="primary" size="sm">Primary</Button>
+                <Button variant="outline" size="sm">Outline</Button>
+              </div>
+            </div>
+
+            <div className="text-center p-6 bg-green-50 rounded-lg">
+              <div className="w-12 h-12 bg-green-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">TS</span>
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-2">@nexus/shared-types</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                TypeScript interfaces and types shared between frontend and backend
+              </p>
+              <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                User, ApiResponse, HealthCheck
+              </div>
+            </div>
+
+            <div className="text-center p-6 bg-purple-50 rounded-lg">
+              <div className="w-12 h-12 bg-purple-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
+                <span className="text-white font-bold">FN</span>
+              </div>
+              <h4 className="font-semibold text-gray-900 mb-2">@nexus/shared-utils</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                Utility functions for formatting, validation, and API communication
+              </p>
+              <div className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                formatDate, validateEmail, apiRequest
+              </div>
+            </div>
           </div>
+
           <div className="text-center">
-            <Link href="/ui-demo">
+            <Link href="/integration-demo">
               <Button variant="outline" rightIcon={<ArrowRightIcon />}>
-                View All Components
+                See All Packages in Action
               </Button>
             </Link>
           </div>
@@ -143,6 +186,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center text-gray-600">
             <p>&copy; 2025 Nexus Workspace. Built with ❤️ using modern web technologies.</p>
+            <p className="mt-2 text-sm">
+              Demonstrating end-to-end monorepo integration with shared packages
+            </p>
           </div>
         </div>
       </footer>
@@ -150,11 +196,19 @@ export default function HomePage() {
   );
 }
 
-// Simple arrow icon component
+// Icon components
 function ArrowRightIcon() {
   return (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function IntegrationIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
     </svg>
   );
 }

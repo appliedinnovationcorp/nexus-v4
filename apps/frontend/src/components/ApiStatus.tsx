@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiRequest, isErrorResponse, extractApiData } from '@nexus/shared-utils';
+import type { HealthCheckResponse } from '@nexus/shared-types';
 
 interface ApiStatusProps {
   className?: string;
@@ -9,6 +11,7 @@ interface ApiStatusProps {
 export function ApiStatus({ className = '' }: ApiStatusProps) {
   const [status, setStatus] = useState<'loading' | 'online' | 'offline'>('loading');
   const [responseTime, setResponseTime] = useState<number | null>(null);
+  const [healthData, setHealthData] = useState<HealthCheckResponse | null>(null);
 
   useEffect(() => {
     const checkApiStatus = async () => {
@@ -16,27 +19,32 @@ export function ApiStatus({ className = '' }: ApiStatusProps) {
         const startTime = Date.now();
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-        const response = await fetch(`${apiUrl}/health/ready`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        // Use shared utility for API request
+        const response = await apiRequest<HealthCheckResponse>(
+          `${apiUrl}/health/ready`,
+          {
+            method: 'GET',
+          }
+        );
 
         const endTime = Date.now();
         const responseTimeMs = endTime - startTime;
 
-        if (response.ok) {
-          setStatus('online');
-          setResponseTime(responseTimeMs);
-        } else {
+        if (isErrorResponse(response)) {
           setStatus('offline');
           setResponseTime(null);
+          setHealthData(null);
+        } else {
+          const data = extractApiData(response);
+          setStatus(data.status === 'ok' ? 'online' : 'offline');
+          setResponseTime(responseTimeMs);
+          setHealthData(data);
         }
       } catch (error) {
         console.warn('API health check failed:', error);
         setStatus('offline');
         setResponseTime(null);
+        setHealthData(null);
       }
     };
 
@@ -76,6 +84,11 @@ export function ApiStatus({ className = '' }: ApiStatusProps) {
     <div className={`flex items-center space-x-2 ${className}`}>
       <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
       <span className="text-sm font-medium text-gray-700">{getStatusText()}</span>
+      {healthData && status === 'online' && (
+        <span className="text-xs text-gray-500">
+          v{healthData.version}
+        </span>
+      )}
     </div>
   );
 }

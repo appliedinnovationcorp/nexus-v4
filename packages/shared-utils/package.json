@@ -1,0 +1,39 @@
+{
+  "name": "@nexus/shared-utils",
+  "version": "1.0.0",
+  "description": "Shared utility functions for Nexus workspace",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "format": "prettier --write \"src/**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,json,md}\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "utils",
+    "utilities",
+    "typescript",
+    "shared",
+    "nexus"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@nexus/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@nexus/shared-types",
+  "version": "1.0.0",
+  "description": "Shared TypeScript types for Nexus workspace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "format": "prettier --write \"src/**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,json,md}\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "types",
+    "typescript",
+    "shared",
+    "nexus"
+  ],
+  "license": "ISC",
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

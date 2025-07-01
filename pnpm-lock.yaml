@@ -23,6 +23,12 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@nexus/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@nexus/shared-utils':
+        specifier: workspace:*
+        version: link:../../packages/shared-utils
       '@nexus/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -112,6 +118,31 @@ importers:
       prettier:
         specifier: ^3.4.2
         version: 3.6.2
+
+  packages/shared-types:
+    devDependencies:
+      prettier:
+        specifier: ^3.4.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+
+  packages/shared-utils:
+    dependencies:
+      '@nexus/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      prettier:
+        specifier: ^3.4.2
+        version: 3.6.2
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.0(@swc/core@1.12.7)(jiti@2.4.2)(postcss@8.5.6)(typescript@5.8.3)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
 
   packages/ui:
     dependencies:
