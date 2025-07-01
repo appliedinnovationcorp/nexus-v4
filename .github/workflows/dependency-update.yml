@@ -1,0 +1,89 @@
+name: Dependency Update Check
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dependency-check:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: '8'
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "Checking for outdated dependencies..."
+          pnpm outdated || true
+
+      - name: Security audit
+        run: |
+          echo "Running security audit..."
+          pnpm audit --audit-level moderate || true
+
+      - name: Create issue for outdated dependencies
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Weekly Dependency Update - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## 📦 Weekly Dependency Update Report
+            
+            This is an automated report of outdated dependencies in the Nexus workspace.
+            
+            ### Actions Required:
+            - [ ] Review outdated dependencies
+            - [ ] Update critical security vulnerabilities
+            - [ ] Test updated dependencies
+            - [ ] Update lock files
+            
+            ### Commands to run:
+            \`\`\`bash
+            # Check outdated packages
+            pnpm outdated
+            
+            # Update dependencies
+            pnpm update
+            
+            # Run security audit
+            pnpm audit
+            \`\`\`
+            
+            **Generated on**: ${new Date().toISOString()}
+            **Workflow**: ${context.workflow}
+            **Run ID**: ${context.runId}`;
+            
+            // Check if issue already exists
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'dependencies',
+              state: 'open'
+            });
+            
+            const existingIssue = issues.find(issue => 
+              issue.title.includes('Weekly Dependency Update')
+            );
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['dependencies', 'maintenance', 'automated']
+              });
+            }

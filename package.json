@@ -6,6 +6,8 @@
   "scripts": {
     "build": "turbo build",
     "test": "turbo test",
+    "test:e2e": "turbo test:e2e",
+    "test:coverage": "turbo test:coverage",
     "lint": "turbo lint",
     "lint:fix": "turbo lint:fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,yaml,yml}\"",
@@ -14,14 +16,32 @@
     "clean": "turbo clean",
     "type-check": "turbo type-check",
     "install:all": "pnpm install",
-    "update:all": "pnpm -r update"
+    "update:all": "pnpm -r update",
+    "audit": "pnpm audit --audit-level moderate",
+    "audit:fix": "pnpm audit --fix",
+    "outdated": "pnpm -r outdated",
+    "ci:setup": "pnpm install --frozen-lockfile",
+    "ci:build": "pnpm build",
+    "ci:test": "pnpm test",
+    "ci:lint": "pnpm lint && pnpm format:check && pnpm type-check",
+    "ci:audit": "pnpm audit",
+    "docker:build": "./scripts/docker-build.sh",
+    "docker:build:frontend": "cd apps/frontend && ./build.sh",
+    "docker:build:backend": "cd services/backend && ./build.sh",
+    "db:setup": "./scripts/db-setup.sh up",
+    "db:reset": "./scripts/db-setup.sh reset",
+    "prisma:setup": "./scripts/setup-prisma.sh setup"
   },
   "keywords": [
     "workspace",
     "monorepo",
-    "pnpm"
+    "pnpm",
+    "nextjs",
+    "nestjs",
+    "prisma",
+    "docker"
   ],
-  "author": "",
+  "author": "Nexus Team",
   "license": "ISC",
   "packageManager": "pnpm@10.11.1",
   "devDependencies": {
@@ -33,5 +53,13 @@
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/appliedinnovationcorp/nexus-v4.git"
+  },
+  "bugs": {
+    "url": "https://github.com/appliedinnovationcorp/nexus-v4/issues"
+  },
+  "homepage": "https://github.com/appliedinnovationcorp/nexus-v4#readme"
 }

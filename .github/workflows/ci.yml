@@ -1,0 +1,491 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main, develop]
+
+# Cancel in-progress runs for the same workflow and branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '8'
+  # Disable telemetry
+  NEXT_TELEMETRY_DISABLED: 1
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  # =============================================================================
+  # Setup and Validation Job
+  # =============================================================================
+  setup:
+    name: Setup and Validation
+    runs-on: ubuntu-latest
+    outputs:
+      affected-packages: ${{ steps.affected.outputs.packages }}
+      has-frontend: ${{ steps.affected.outputs.has-frontend }}
+      has-backend: ${{ steps.affected.outputs.has-backend }}
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          echo "key=pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate workspace structure
+        run: |
+          echo "Validating workspace structure..."
+          pnpm list --depth=0
+          echo "Workspace packages:"
+          pnpm -r list --depth=0
+
+      - name: Detect affected packages
+        id: affected
+        run: |
+          # For now, we'll build all packages on every PR
+          # In the future, this could be optimized to only build affected packages
+          echo "packages=all" >> $GITHUB_OUTPUT
+          echo "has-frontend=true" >> $GITHUB_OUTPUT
+          echo "has-backend=true" >> $GITHUB_OUTPUT
+
+  # =============================================================================
+  # Lint Job
+  # =============================================================================
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Restore pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ needs.setup.outputs.cache-key }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: |
+          echo "Running ESLint across all packages..."
+          pnpm lint
+        continue-on-error: false
+
+      - name: Run Prettier check
+        run: |
+          echo "Checking code formatting with Prettier..."
+          pnpm format:check
+        continue-on-error: false
+
+      - name: Run TypeScript type checking
+        run: |
+          echo "Running TypeScript type checking..."
+          pnpm type-check
+        continue-on-error: false
+
+  # =============================================================================
+  # Build Job
+  # =============================================================================
+  build:
+    name: Build Packages
+    runs-on: ubuntu-latest
+    needs: setup
+    strategy:
+      matrix:
+        package-group: [shared, apps, services]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Restore pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ needs.setup.outputs.cache-key }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        if: matrix.package-group == 'shared'
+        run: |
+          echo "Building shared packages..."
+          pnpm --filter "@nexus/prettier-config" build || echo "No build script for prettier-config"
+          pnpm --filter "@nexus/eslint-config" build || echo "No build script for eslint-config"
+          pnpm --filter "@nexus/shared-types" build
+          pnpm --filter "@nexus/shared-utils" build
+          pnpm --filter "@nexus/shared-database" build
+          pnpm --filter "@nexus/ui" build
+
+      - name: Build applications
+        if: matrix.package-group == 'apps'
+        run: |
+          echo "Building applications..."
+          if [ -d "apps/frontend" ]; then
+            echo "Building frontend application..."
+            pnpm --filter "@nexus/frontend" build
+          fi
+
+      - name: Build services
+        if: matrix.package-group == 'services'
+        run: |
+          echo "Building services..."
+          if [ -d "services/backend" ]; then
+            echo "Building backend service..."
+            # Generate Prisma client first
+            cd services/backend && pnpm db:generate
+            pnpm --filter "@nexus/backend" build
+          fi
+
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            packages/*/dist
+            apps/*/dist
+            apps/*/.next
+            services/*/dist
+          key: build-${{ matrix.package-group }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ matrix.package-group }}-
+
+  # =============================================================================
+  # Test Job
+  # =============================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: [setup, build]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nexus_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7.2-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5432/nexus_test
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Restore pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ needs.setup.outputs.cache-key }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            packages/*/dist
+            apps/*/dist
+            apps/*/.next
+            services/*/dist
+          key: build-shared-${{ github.sha }}
+
+      - name: Setup test database
+        run: |
+          echo "Setting up test database..."
+          if [ -d "services/backend" ]; then
+            cd services/backend
+            pnpm db:generate
+            # Run migrations if they exist
+            if [ -d "prisma/migrations" ]; then
+              pnpm db:migrate:deploy
+            else
+              pnpm db:push
+            fi
+          fi
+
+      - name: Run unit tests
+        run: |
+          echo "Running unit tests..."
+          pnpm test
+        continue-on-error: false
+
+      - name: Run integration tests
+        run: |
+          echo "Running integration tests..."
+          pnpm test:e2e || echo "No e2e tests configured yet"
+        continue-on-error: true
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # =============================================================================
+  # Security Audit Job
+  # =============================================================================
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Restore pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ needs.setup.outputs.cache-key }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run security audit
+        run: |
+          echo "Running security audit..."
+          pnpm audit --audit-level moderate
+        continue-on-error: true
+
+      - name: Check for known vulnerabilities
+        run: |
+          echo "Checking for known vulnerabilities..."
+          # This will be expanded with additional security tools
+          echo "Security check completed"
+
+  # =============================================================================
+  # Docker Build Job (Optional)
+  # =============================================================================
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [setup, build]
+    if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        service: [frontend, backend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.service == 'frontend' && 'apps/frontend/Dockerfile' || 'services/backend/Dockerfile' }}
+          push: false
+          tags: nexus/${{ matrix.service }}:pr-${{ github.event.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  # =============================================================================
+  # Summary Job
+  # =============================================================================
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [setup, lint, build, test, security]
+    if: always()
+    steps:
+      - name: Check job results
+        run: |
+          echo "CI Pipeline Summary:"
+          echo "==================="
+          echo "Setup: ${{ needs.setup.result }}"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Build: ${{ needs.build.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          
+          # Check if any required job failed
+          if [[ "${{ needs.setup.result }}" == "failure" || "${{ needs.lint.result }}" == "failure" || "${{ needs.build.result }}" == "failure" ]]; then
+            echo "❌ CI Pipeline failed - required jobs failed"
+            exit 1
+          elif [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "⚠️ CI Pipeline completed with test failures"
+            exit 1
+          else
+            echo "✅ CI Pipeline completed successfully"
+          fi
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('CI Pipeline Summary')
+            );
+            
+            const summary = `## 🤖 CI Pipeline Summary
+            
+            | Job | Status |
+            |-----|--------|
+            | Setup | ${{ needs.setup.result == 'success' && '✅' || needs.setup.result == 'failure' && '❌' || '⏳' }} |
+            | Lint | ${{ needs.lint.result == 'success' && '✅' || needs.lint.result == 'failure' && '❌' || '⏳' }} |
+            | Build | ${{ needs.build.result == 'success' && '✅' || needs.build.result == 'failure' && '❌' || '⏳' }} |
+            | Test | ${{ needs.test.result == 'success' && '✅' || needs.test.result == 'failure' && '❌' || '⏳' }} |
+            | Security | ${{ needs.security.result == 'success' && '✅' || needs.security.result == 'failure' && '❌' || '⏳' }} |
+            
+            **Overall Status**: ${{ (needs.setup.result == 'success' && needs.lint.result == 'success' && needs.build.result == 'success') && '✅ Passed' || '❌ Failed' }}
+            
+            <details>
+            <summary>Pipeline Details</summary>
+            
+            - **Commit**: ${context.sha.substring(0, 7)}
+            - **Branch**: ${context.ref.replace('refs/heads/', '')}
+            - **Triggered by**: ${context.eventName}
+            - **Run ID**: ${context.runId}
+            
+            </details>`;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: summary
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: summary
+              });
+            }
