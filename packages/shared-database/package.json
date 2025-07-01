@@ -1,0 +1,44 @@
+{
+  "name": "@nexus/shared-database",
+  "version": "1.0.0",
+  "description": "Shared database utilities and connections for Nexus workspace",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "format": "prettier --write \"src/**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,json,md}\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "database",
+    "postgresql",
+    "mongodb",
+    "redis",
+    "shared",
+    "nexus"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@nexus/shared-types": "workspace:*",
+    "pg": "^8.11.3",
+    "mongodb": "^6.3.0",
+    "redis": "^4.6.12"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.9",
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}
