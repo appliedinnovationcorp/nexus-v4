@@ -1,0 +1,425 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// User Management Models
+// =============================================================================
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  username  String   @unique
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  
+  // Authentication
+  passwordHash String  @map("password_hash")
+  
+  // Profile information
+  avatarUrl String? @map("avatar_url")
+  bio       String?
+  website   String?
+  location  String?
+  
+  // User status and role
+  role   UserRole   @default(USER)
+  status UserStatus @default(ACTIVE)
+  
+  // Email verification
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  
+  // Login tracking
+  lastLoginAt DateTime? @map("last_login_at")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  profile     UserProfile?
+  sessions    UserSession[]
+  posts       Post[]
+  comments    Comment[]
+  likes       Like[]
+  follows     Follow[]     @relation("UserFollows")
+  followers   Follow[]     @relation("UserFollowers")
+  pageViews   PageView[]
+  activities  Activity[]
+  files       File[]
+  
+  @@map("users")
+}
+
+model UserProfile {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  
+  // Preferences
+  theme    Theme    @default(SYSTEM)
+  language String   @default("en")
+  timezone String   @default("UTC")
+  
+  // Notification preferences
+  notificationsEmail Boolean @default(true) @map("notifications_email")
+  notificationsPush  Boolean @default(true) @map("notifications_push")
+  notificationsSms   Boolean @default(false) @map("notifications_sms")
+  
+  // Privacy settings
+  profileVisible  Boolean @default(true) @map("profile_visible")
+  activityVisible Boolean @default(true) @map("activity_visible")
+  
+  // Social media links
+  socialLinks Json? @map("social_links")
+  
+  // Custom settings
+  customSettings Json? @map("custom_settings")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_profiles")
+}
+
+model UserSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  
+  // Session metadata
+  userAgent String? @map("user_agent")
+  ipAddress String? @map("ip_address")
+  
+  // Session lifecycle
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_sessions")
+}
+
+// =============================================================================
+// Content Management Models
+// =============================================================================
+
+model Post {
+  id      String @id @default(uuid()) @db.Uuid
+  authorId String @map("author_id") @db.Uuid
+  
+  // Content
+  title   String
+  slug    String  @unique
+  content String?
+  excerpt String?
+  
+  // Metadata
+  featuredImage String? @map("featured_image")
+  tags          String[]
+  categories    String[]
+  
+  // SEO
+  metaTitle       String? @map("meta_title")
+  metaDescription String? @map("meta_description")
+  
+  // Status and visibility
+  status      PostStatus @default(DRAFT)
+  visibility  PostVisibility @default(PUBLIC)
+  publishedAt DateTime?  @map("published_at")
+  
+  // Engagement metrics
+  viewCount    Int @default(0) @map("view_count")
+  likeCount    Int @default(0) @map("like_count")
+  commentCount Int @default(0) @map("comment_count")
+  shareCount   Int @default(0) @map("share_count")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+  
+  @@map("posts")
+}
+
+model Comment {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  
+  // Content
+  content String
+  
+  // Hierarchy (for nested comments)
+  parentId String? @map("parent_id") @db.Uuid
+  
+  // Status
+  status CommentStatus @default(PUBLISHED)
+  
+  // Engagement
+  likeCount Int @default(0) @map("like_count")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+  likes    Like[]
+  
+  @@map("comments")
+}
+
+model Like {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  
+  // Polymorphic relations
+  postId    String? @map("post_id") @db.Uuid
+  commentId String? @map("comment_id") @db.Uuid
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@map("likes")
+}
+
+// =============================================================================
+// Social Features Models
+// =============================================================================
+
+model Follow {
+  id          String @id @default(uuid()) @db.Uuid
+  followerId  String @map("follower_id") @db.Uuid
+  followingId String @map("following_id") @db.Uuid
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  follower  User @relation("UserFollows", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+// =============================================================================
+// Analytics and Tracking Models
+// =============================================================================
+
+model PageView {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String? @map("user_id") @db.Uuid
+  sessionId String? @map("session_id")
+  
+  // Page information
+  path     String
+  title    String?
+  referrer String?
+  
+  // User agent and device info
+  userAgent String? @map("user_agent")
+  ipAddress String? @map("ip_address")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("page_views")
+}
+
+model Activity {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  
+  // Activity details
+  type        ActivityType
+  description String
+  metadata    Json?
+  
+  // Context
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("activities")
+}
+
+// =============================================================================
+// File Management Models
+// =============================================================================
+
+model File {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String? @map("user_id") @db.Uuid
+  
+  // File information
+  filename     String
+  originalName String @map("original_name")
+  mimeType     String @map("mime_type")
+  size         Int
+  path         String
+  url          String?
+  
+  // File metadata
+  metadata Json?
+  tags     String[]
+  
+  // Status
+  status FileStatus @default(ACTIVE)
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("files")
+}
+
+// =============================================================================
+// System Models
+// =============================================================================
+
+model Setting {
+  id    String @id @default(uuid()) @db.Uuid
+  key   String @unique
+  value Json
+  
+  // Metadata
+  description String?
+  category    String?
+  isPublic    Boolean @default(false) @map("is_public")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@map("settings")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  USER
+  GUEST
+  
+  @@map("user_role")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+  
+  @@map("user_status")
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+  
+  @@map("theme")
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  DELETED
+  
+  @@map("post_status")
+}
+
+enum PostVisibility {
+  PUBLIC
+  PRIVATE
+  UNLISTED
+  
+  @@map("post_visibility")
+}
+
+enum CommentStatus {
+  PUBLISHED
+  PENDING
+  SPAM
+  DELETED
+  
+  @@map("comment_status")
+}
+
+enum ActivityType {
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_CHANGE
+  EMAIL_CHANGE
+  PROFILE_UPDATE
+  POST_CREATE
+  POST_UPDATE
+  POST_DELETE
+  COMMENT_CREATE
+  COMMENT_UPDATE
+  COMMENT_DELETE
+  LIKE_CREATE
+  LIKE_DELETE
+  FOLLOW_CREATE
+  FOLLOW_DELETE
+  FILE_UPLOAD
+  FILE_DELETE
+  
+  @@map("activity_type")
+}
+
+enum FileStatus {
+  ACTIVE
+  DELETED
+  PROCESSING
+  ERROR
+  
+  @@map("file_status")
+}

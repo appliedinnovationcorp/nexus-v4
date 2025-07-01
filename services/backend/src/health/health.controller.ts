@@ -6,6 +6,7 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Health')
 @Controller('health')
@@ -14,6 +15,7 @@ export class HealthController {
     private health: HealthCheckService,
     private memory: MemoryHealthIndicator,
     private disk: DiskHealthIndicator,
+    private prisma: PrismaService,
   ) {}
 
   @Get()
@@ -35,15 +37,62 @@ export class HealthController {
 
   @Get('ready')
   @ApiOperation({ summary: 'Check if application is ready' })
-  @ApiResponse({ status: 200, description: 'Application is ready' })
-  ready() {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Application is ready',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'ok' },
+        timestamp: { type: 'string', format: 'date-time' },
+        uptime: { type: 'number' },
+        version: { type: 'string' },
+        environment: { type: 'string' },
+        database: { type: 'object' },
+      },
+    },
+  })
+  async ready() {
+    try {
+      // Check database connection
+      const dbHealth = await this.prisma.healthCheck();
+      const dbStats = await this.prisma.getDatabaseStats();
+
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: process.env.npm_package_version || '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        database: {
+          status: dbHealth.status,
+          timestamp: dbHealth.timestamp,
+          stats: dbStats,
+        },
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: process.env.npm_package_version || '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        database: {
+          status: 'unhealthy',
+          error: error.message,
+        },
+      };
+    }
   }
 
   @Get('live')
   @ApiOperation({ summary: 'Check if application is alive' })
   @ApiResponse({ status: 200, description: 'Application is alive' })
   live() {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+    return { 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    };
   }
 }
