@@ -1,27 +1,33 @@
 # =============================================================================
-# Docker ignore file for Next.js Frontend Application
+# Docker ignore file for Nexus Workspace Root
 # =============================================================================
 # Excludes unnecessary files from Docker build context for faster builds
 
 # Dependencies
 node_modules
+**/node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Next.js build outputs
+# Build outputs
+dist/
+build/
 .next/
 out/
-
-# Production build
-build/
-dist/
+**/dist/
+**/build/
+**/.next/
+**/out/
 
 # Environment files
 .env
 .env*.local
 .env.production
+**/.env
+**/.env*.local
+**/.env.production
 
 # IDE and editor files
 .vscode/
@@ -29,6 +35,8 @@ dist/
 *.swp
 *.swo
 *~
+**/.vscode/
+**/.idea/
 
 # OS generated files
 .DS_Store
@@ -38,10 +46,13 @@ dist/
 .Trashes
 ehthumbs.db
 Thumbs.db
+**/.DS_Store
 
 # Logs
 logs
 *.log
+**/logs
+**/*.log
 
 # Runtime data
 pids
@@ -52,24 +63,27 @@ pids
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov
+**/coverage/
 
 # nyc test coverage
 .nyc_output
+**/.nyc_output
 
 # ESLint cache
 .eslintcache
+**/.eslintcache
 
 # Prettier cache
 .prettiercache
+**/.prettiercache
 
 # Stylelint cache
 .stylelintcache
+**/.stylelintcache
 
 # Optional npm cache directory
 .npm
-
-# Optional eslint cache
-.eslintcache
+**/.npm
 
 # Microbundle cache
 .rpt2_cache/
@@ -86,9 +100,11 @@ coverage/
 # Yarn Integrity file
 .yarn-integrity
 
-# parcel-bundler cache (https://parceljs.org/)
+# parcel-bundler cache
 .cache
 .parcel-cache
+**/.cache
+**/.parcel-cache
 
 # Storybook build outputs
 .out
@@ -98,18 +114,25 @@ storybook-static
 # Temporary folders
 tmp/
 temp/
+**/tmp/
+**/temp/
 
 # Git
 .git/
 .gitignore
+.gitattributes
 
 # Docker
 Dockerfile*
 .dockerignore
+**/.dockerignore
+docker-compose*.yml
 
 # Documentation
 README.md
 *.md
+docs/
+**/*.md
 
 # Test files
 **/*.test.*
@@ -117,20 +140,60 @@ README.md
 __tests__/
 test/
 tests/
+**/test/
+**/tests/
 
 # Linting and formatting
 .eslintrc*
 .prettierrc*
 .editorconfig
+**/.eslintrc*
+**/.prettierrc*
 
 # TypeScript
 *.tsbuildinfo
+**/*.tsbuildinfo
 
 # Turbo
 .turbo/
+**/.turbo/
 
 # Vercel
 .vercel
+**/.vercel
+
+# Database
+*.db
+*.sqlite
+database/
+**/database/
+
+# Uploads (will be mounted as volume)
+uploads/
+**/uploads/
 
 # Local development
 .local
+**/.local
+
+# Backup files
+*.backup
+*.bak
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Package manager
+.pnpm-store/
+.yarn/
+.npm/
+
+# Monitoring and analytics
+.sentry/
+
+# Misc
+*.tgz
+*.tar.gz
