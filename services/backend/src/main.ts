@@ -7,8 +7,14 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { LoggerService } from './common/logger/logger.service';
 import { SentryService } from './common/sentry/sentry.service';
+import { validateEnvironmentVariables } from './config/env.config';
 
 async function bootstrap(): Promise<void> {
+  // Validate environment variables before creating the app
+  console.log('🔍 Validating environment variables...');
+  const env = validateEnvironmentVariables();
+  console.log('✅ Environment variables validated successfully');
+
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
@@ -22,10 +28,10 @@ async function bootstrap(): Promise<void> {
   app.flushLogs();
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3000);
-  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  const port = env.PORT;
+  const nodeEnv = env.NODE_ENV;
 
-  // Log application startup
+  // Log application startup with validated environment
   logger.logStartup('Starting Nexus Backend API', {
     port,
     environment: nodeEnv,
@@ -34,6 +40,10 @@ async function bootstrap(): Promise<void> {
     arch: process.arch,
     pid: process.pid,
     sentryEnabled: sentryService.isReady(),
+    databaseConfigured: !!env.DATABASE_URL,
+    jwtConfigured: !!env.JWT_SECRET,
+    redisConfigured: !!env.REDIS_URL,
+    smtpConfigured: !!env.SMTP_HOST,
   });
 
   // Add Sentry breadcrumb for startup
@@ -45,6 +55,7 @@ async function bootstrap(): Promise<void> {
       port,
       environment: nodeEnv,
       nodeVersion: process.version,
+      configValidated: true,
     },
   );
 
@@ -61,22 +72,20 @@ async function bootstrap(): Promise<void> {
   );
 
   // CORS configuration
-  const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
   app.enableCors({
-    origin: corsOrigin,
+    origin: env.CORS_ORIGIN,
     credentials: true,
   });
 
   // API prefix
-  const apiPrefix = configService.get<string>('API_PREFIX', 'api');
-  app.setGlobalPrefix(apiPrefix);
+  app.setGlobalPrefix(env.API_PREFIX);
 
   // Swagger documentation
-  if (nodeEnv !== 'production') {
+  if (env.ENABLE_SWAGGER && nodeEnv !== 'production') {
     const config = new DocumentBuilder()
-      .setTitle('Nexus Backend API')
+      .setTitle(env.APP_NAME)
       .setDescription('NestJS backend service for Nexus workspace with structured logging and error tracking')
-      .setVersion('1.0')
+      .setVersion(env.APP_VERSION)
       .addBearerAuth()
       .addTag('auth', 'Authentication endpoints')
       .addTag('users', 'User management endpoints')
@@ -85,14 +94,14 @@ async function bootstrap(): Promise<void> {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup(`${apiPrefix}/docs`, app, document, {
+    SwaggerModule.setup(`${env.API_PREFIX}/docs`, app, document, {
       swaggerOptions: {
         persistAuthorization: true,
       },
     });
 
     logger.info('Swagger documentation available', {
-      url: `http://localhost:${port}/${apiPrefix}/docs`,
+      url: `http://localhost:${port}/${env.API_PREFIX}/docs`,
     });
   }
 
@@ -184,22 +193,23 @@ async function bootstrap(): Promise<void> {
     {
       port,
       environment: nodeEnv,
-      url: `http://localhost:${port}/${apiPrefix}`,
+      url: `http://localhost:${port}/${env.API_PREFIX}`,
     },
   );
 
   logger.logStartup('Nexus Backend API started successfully', {
     port,
     environment: nodeEnv,
-    url: `http://localhost:${port}/${apiPrefix}`,
-    apiDocs: nodeEnv !== 'production' ? `http://localhost:${port}/${apiPrefix}/docs` : undefined,
-    healthCheck: `http://localhost:${port}/${apiPrefix}/health`,
+    url: `http://localhost:${port}/${env.API_PREFIX}`,
+    apiDocs: env.ENABLE_SWAGGER && nodeEnv !== 'production' ? `http://localhost:${port}/${env.API_PREFIX}/docs` : undefined,
+    healthCheck: `http://localhost:${port}/${env.API_PREFIX}/health`,
     sentryEnabled: sentryService.isReady(),
+    configurationValid: true,
   });
 }
 
 void bootstrap().catch(async (error) => {
-  console.error('Failed to start application:', error);
+  console.error('❌ Failed to start application:', error);
   
   // Try to report to Sentry if possible
   try {

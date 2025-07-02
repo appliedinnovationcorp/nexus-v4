@@ -1,4 +1,15 @@
 const { withSentryConfig } = require('@sentry/nextjs');
+const { validateAllEnvironmentVariables } = require('./lib/env');
+
+// Validate environment variables at build time
+try {
+  console.log('🔍 Validating environment variables...');
+  validateAllEnvironmentVariables();
+  console.log('✅ Environment variables validated successfully');
+} catch (error) {
+  console.error('❌ Environment validation failed during build');
+  process.exit(1);
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -9,6 +20,8 @@ const nextConfig = {
   experimental: {
     // Enable server components
     serverComponentsExternalPackages: [],
+    // Enable instrumentation for environment validation
+    instrumentationHook: true,
   },
 
   // Transpile shared packages from the monorepo
@@ -18,7 +31,7 @@ const nextConfig = {
     '@nexus/ui',
   ],
 
-  // Environment variables
+  // Environment variables validation
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },

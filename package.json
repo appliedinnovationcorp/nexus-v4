@@ -30,7 +30,12 @@
     "docker:build:backend": "cd services/backend && ./build.sh",
     "db:setup": "./scripts/db-setup.sh up",
     "db:reset": "./scripts/db-setup.sh reset",
-    "prisma:setup": "./scripts/setup-prisma.sh setup"
+    "prisma:setup": "./scripts/setup-prisma.sh setup",
+    "validate:env": "node scripts/validate-env.js",
+    "validate:env:backend": "node scripts/validate-env.js --backend",
+    "validate:env:frontend": "node scripts/validate-env.js --frontend",
+    "validate:env:all": "node scripts/validate-env.js --all",
+    "setup:env": "node scripts/validate-env.js --template"
   },
   "keywords": [
     "workspace",
@@ -45,6 +50,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.11.1",
   "devDependencies": {
+    "dotenv": "^16.4.7",
     "eslint": "^9.30.0",
     "prettier": "^3.4.2",
     "turbo": "^2.5.4",

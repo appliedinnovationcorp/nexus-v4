@@ -28,6 +28,10 @@ import { validate } from './config/env.config';
       isGlobal: true,
       validate,
       envFilePath: ['.env.local', '.env'],
+      // Expand variables in .env files
+      expandVariables: true,
+      // Cache the configuration
+      cache: true,
     }),
     LoggerModule,
     SentryModule,
