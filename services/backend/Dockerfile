@@ -1,88 +1,79 @@
-# =============================================================================
-# Multi-stage Dockerfile for NestJS Backend Service
-# =============================================================================
-# Builder stage for dependencies and compilation, minimal Alpine runtime stage
+# Multi-stage Dockerfile for NestJS Backend
 
-# =============================================================================
-# Stage 1: Builder - Install dependencies and build the application
-# =============================================================================
-FROM node:20-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache libc6-compat
+# Stage 1: Build stage
+FROM node:18-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Enable pnpm
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+# Install pnpm
+RUN npm install -g pnpm@8
 
-# Copy package files for dependency installation
-COPY package.json pnpm-lock.yaml ./
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/backend/package.json ./services/backend/
+COPY packages/ ./packages/
+COPY libs/ ./libs/
+COPY types/ ./types/
+COPY utils/ ./utils/
 
-# Install all dependencies (including devDependencies for building)
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+# Install dependencies
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
-COPY services/backend ./services/backend
-
-# Generate Prisma client
-RUN cd services/backend && pnpm db:generate
+COPY services/backend/ ./services/backend/
+COPY tsconfig.json ./
 
 # Build the application
-RUN cd services/backend && pnpm build
+RUN pnpm build --filter=@nexus/backend
 
-# Install production dependencies only
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --prod --frozen-lockfile
+# Stage 2: Production stage
+FROM node:18-alpine AS production
 
-# =============================================================================
-# Stage 2: Runtime - Minimal Alpine image with only necessary files
-# =============================================================================
-FROM node:20-alpine AS runtime
+# Install security updates
+RUN apk update && apk upgrade && apk add --no-cache dumb-init
 
-# Install runtime dependencies
-RUN apk add --no-cache dumb-init tini curl
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nestjs
+# Create app user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
 
 # Set working directory
 WORKDIR /app
 
-# Set production environment
-ENV NODE_ENV=production
-ENV PORT=3001
+# Install pnpm
+RUN npm install -g pnpm@8
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY services/backend/package.json ./services/backend/
+
+# Install only production dependencies
+RUN pnpm install --frozen-lockfile --prod
 
 # Copy built application from builder stage
-COPY --from=builder --chown=nestjs:nodejs /app/services/backend/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/services/backend/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/services/backend/dist ./services/backend/dist
+COPY --from=builder --chown=nestjs:nodejs /app/services/backend/prisma ./services/backend/prisma
 
-# Copy package.json for runtime
-COPY --from=builder --chown=nestjs:nodejs /app/services/backend/package.json ./package.json
+# Copy startup script
+COPY --chown=nestjs:nodejs services/backend/docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 # Create necessary directories
-RUN mkdir -p logs uploads && \
-    chown -R nestjs:nodejs logs uploads
+RUN mkdir -p /tmp /var/cache && \
+    chown -R nestjs:nodejs /tmp /var/cache
 
 # Switch to non-root user
 USER nestjs
 
 # Expose port
-EXPOSE 3001
+EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:3001/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node services/backend/dist/health-check.js
 
-# Use tini as init system
-ENTRYPOINT ["tini", "--"]
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
-CMD ["node", "dist/main.js"]
+CMD ["./docker-entrypoint.sh"]

@@ -1,0 +1,461 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  # Job 1: Build and test the monorepo
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      infrastructure-changed: ${{ steps.changes.outputs.infrastructure }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'services/backend/**'
+              - 'packages/**'
+              - 'libs/**'
+              - 'types/**'
+              - 'utils/**'
+            frontend:
+              - 'apps/frontend/**'
+              - 'packages/**'
+              - 'libs/**'
+              - 'types/**'
+              - 'utils/**'
+              - 'components/**'
+            infrastructure:
+              - 'infrastructure/**'
+              - '.github/workflows/**'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run linting
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+  # Job 2: Build and push backend Docker image
+  build-backend:
+    name: Build Backend Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: needs.build-and-test.outputs.backend-changed == 'true'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.tags }}
+          format: spdx-json
+          output-file: backend-sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-sbom
+          path: backend-sbom.spdx.json
+
+  # Job 3: Security scan for backend image
+  security-scan-backend:
+    name: Security Scan Backend
+    runs-on: ubuntu-latest
+    needs: build-backend
+    if: needs.build-backend.result == 'success'
+    
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build-backend.outputs.image-tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Job 4: Deploy frontend to Vercel
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: needs.build-and-test.outputs.frontend-changed == 'true'
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build --filter=@nexus/frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+
+      - name: Deploy to Vercel
+        id: deploy
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./apps/frontend
+          vercel-args: '--prod'
+
+      - name: Comment deployment URL
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Frontend deployed to: ${{ steps.deploy.outputs.preview-url }}`
+            })
+
+  # Job 5: Deploy backend to Kubernetes
+  deploy-backend:
+    name: Deploy Backend to Kubernetes
+    runs-on: ubuntu-latest
+    needs: [build-backend, security-scan-backend]
+    if: needs.build-backend.result == 'success'
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Deploy to Kubernetes
+        run: |
+          # Create namespace if it doesn't exist
+          kubectl create namespace nexus-${{ github.event.inputs.environment || 'production' }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Deploy using Helm
+          helm upgrade --install nexus-backend ./infrastructure/kubernetes/helm/backend \
+            --namespace nexus-${{ github.event.inputs.environment || 'production' }} \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend \
+            --set image.tag=${{ github.sha }} \
+            --set environment=${{ github.event.inputs.environment || 'production' }} \
+            --set ingress.enabled=true \
+            --set ingress.hosts[0].host=${{ secrets.BACKEND_DOMAIN }} \
+            --set ingress.hosts[0].paths[0].path=/ \
+            --set ingress.hosts[0].paths[0].pathType=Prefix \
+            --wait --timeout=10m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/nexus-backend -n nexus-${{ github.event.inputs.environment || 'production' }}
+          kubectl get pods -n nexus-${{ github.event.inputs.environment || 'production' }}
+
+  # Job 6: Update infrastructure (if needed)
+  update-infrastructure:
+    name: Update Infrastructure
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: needs.build-and-test.outputs.infrastructure-changed == 'true'
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ./infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ./infrastructure/terraform
+        run: |
+          terraform plan \
+            -var="environment=${{ github.event.inputs.environment || 'production' }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ./infrastructure/terraform
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply tfplan
+
+  # Job 7: Run integration tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-backend]
+    if: always() && (needs.deploy-frontend.result == 'success' || needs.deploy-backend.result == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for deployments to be ready
+        run: |
+          echo "Waiting for deployments to stabilize..."
+          sleep 60
+
+      - name: Run integration tests
+        run: |
+          # Test backend health
+          if [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+            curl -f ${{ secrets.BACKEND_URL }}/health || exit 1
+          fi
+          
+          # Test frontend
+          if [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
+            curl -f ${{ secrets.FRONTEND_URL }} || exit 1
+          fi
+
+      - name: Run E2E tests
+        run: |
+          # Run end-to-end tests if both frontend and backend are deployed
+          if [ "${{ needs.deploy-frontend.result }}" == "success" ] && [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+            pnpm test:e2e
+          fi
+
+  # Job 8: Notify deployment status
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-backend, integration-tests]
+    if: always()
+    
+    steps:
+      - name: Notify Slack on success
+        if: needs.deploy-frontend.result == 'success' || needs.deploy-backend.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: '#deployments'
+          text: |
+            🚀 Deployment successful!
+            Frontend: ${{ needs.deploy-frontend.result }}
+            Backend: ${{ needs.deploy-backend.result }}
+            Integration Tests: ${{ needs.integration-tests.result }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Slack on failure
+        if: needs.deploy-frontend.result == 'failure' || needs.deploy-backend.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#deployments'
+          text: |
+            ❌ Deployment failed!
+            Frontend: ${{ needs.deploy-frontend.result }}
+            Backend: ${{ needs.deploy-backend.result }}
+            Integration Tests: ${{ needs.integration-tests.result }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create GitHub deployment status
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const deploymentState = 
+              '${{ needs.deploy-frontend.result }}' === 'success' || 
+              '${{ needs.deploy-backend.result }}' === 'success' ? 'success' : 'failure';
+            
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: deploymentState,
+              description: `Deployment ${deploymentState}`,
+              environment_url: '${{ secrets.FRONTEND_URL }}'
+            });
+
+  # Job 9: Cleanup
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [notify]
+    if: always()
+    
+    steps:
+      - name: Delete old container images
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: packages } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+              package_type: 'container',
+              package_name: 'nexus-workspace/backend',
+              org: context.repo.owner
+            });
+            
+            // Keep only the latest 10 versions
+            const versionsToDelete = packages.slice(10);
+            
+            for (const version of versionsToDelete) {
+              if (version.metadata?.container?.tags?.length === 0) {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  package_type: 'container',
+                  package_name: 'nexus-workspace/backend',
+                  org: context.repo.owner,
+                  package_version_id: version.id
+                });
+              }
+            }

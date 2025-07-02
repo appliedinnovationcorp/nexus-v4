@@ -1,0 +1,366 @@
+name: PR Preview Deployment
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  # Job 1: Build and test changes
+  build-and-test:
+    name: Build and Test PR
+    runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'services/backend/**'
+              - 'packages/**'
+              - 'libs/**'
+              - 'types/**'
+              - 'utils/**'
+            frontend:
+              - 'apps/frontend/**'
+              - 'packages/**'
+              - 'libs/**'
+              - 'types/**'
+              - 'utils/**'
+              - 'components/**'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run linting
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+  # Job 2: Build backend preview image
+  build-backend-preview:
+    name: Build Backend Preview
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: needs.build-and-test.outputs.backend-changed == 'true'
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+          tags: |
+            type=ref,event=pr
+            type=sha,prefix=pr-${{ github.event.number }}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job 3: Deploy frontend preview
+  deploy-frontend-preview:
+    name: Deploy Frontend Preview
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: needs.build-and-test.outputs.frontend-changed == 'true'
+    outputs:
+      preview-url: ${{ steps.deploy.outputs.preview-url }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build --filter=@nexus/frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL_STAGING }}
+          NEXTAUTH_URL: https://nexus-pr-${{ github.event.number }}.vercel.app
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+
+      - name: Deploy to Vercel Preview
+        id: deploy
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./apps/frontend
+          github-comment: true
+          alias-domains: |
+            nexus-pr-${{ github.event.number }}.vercel.app
+
+  # Job 4: Deploy backend preview to staging namespace
+  deploy-backend-preview:
+    name: Deploy Backend Preview
+    runs-on: ubuntu-latest
+    needs: [build-backend-preview]
+    if: needs.build-backend-preview.result == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Deploy preview to Kubernetes
+        run: |
+          # Create preview namespace
+          kubectl create namespace nexus-pr-${{ github.event.number }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Deploy using Helm with PR-specific values
+          helm upgrade --install nexus-backend-pr-${{ github.event.number }} ./infrastructure/kubernetes/helm/backend \
+            --namespace nexus-pr-${{ github.event.number }} \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend \
+            --set image.tag=pr-${{ github.event.number }}-${{ github.sha }} \
+            --set environment=preview \
+            --set ingress.enabled=true \
+            --set ingress.hosts[0].host=api-pr-${{ github.event.number }}.nexus-workspace.com \
+            --set ingress.hosts[0].paths[0].path=/ \
+            --set ingress.hosts[0].paths[0].pathType=Prefix \
+            --set replicaCount=1 \
+            --set resources.requests.cpu=100m \
+            --set resources.requests.memory=256Mi \
+            --set resources.limits.cpu=500m \
+            --set resources.limits.memory=512Mi \
+            --wait --timeout=5m
+
+  # Job 5: Run preview tests
+  test-preview:
+    name: Test Preview Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend-preview, deploy-backend-preview]
+    if: always() && (needs.deploy-frontend-preview.result == 'success' || needs.deploy-backend-preview.result == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for deployments
+        run: |
+          echo "Waiting for deployments to be ready..."
+          sleep 30
+
+      - name: Test frontend preview
+        if: needs.deploy-frontend-preview.result == 'success'
+        run: |
+          curl -f ${{ needs.deploy-frontend-preview.outputs.preview-url }} || exit 1
+
+      - name: Test backend preview
+        if: needs.deploy-backend-preview.result == 'success'
+        run: |
+          curl -f https://api-pr-${{ github.event.number }}.nexus-workspace.com/health || exit 1
+
+      - name: Run smoke tests
+        run: |
+          # Add smoke tests here
+          echo "Running smoke tests..."
+
+  # Job 6: Comment on PR with preview links
+  comment-preview:
+    name: Comment Preview Links
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend-preview, deploy-backend-preview, test-preview]
+    if: always()
+    
+    steps:
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const frontendSuccess = '${{ needs.deploy-frontend-preview.result }}' === 'success';
+            const backendSuccess = '${{ needs.deploy-backend-preview.result }}' === 'success';
+            const testSuccess = '${{ needs.test-preview.result }}' === 'success';
+            
+            let body = '## 🚀 Preview Deployment\n\n';
+            
+            if (frontendSuccess) {
+              body += `✅ **Frontend**: ${{ needs.deploy-frontend-preview.outputs.preview-url }}\n`;
+            } else {
+              body += `❌ **Frontend**: Deployment failed\n`;
+            }
+            
+            if (backendSuccess) {
+              body += `✅ **Backend**: https://api-pr-${{ github.event.number }}.nexus-workspace.com\n`;
+            } else {
+              body += `❌ **Backend**: Deployment failed\n`;
+            }
+            
+            body += '\n### Test Results\n';
+            body += testSuccess ? '✅ All tests passed' : '❌ Some tests failed';
+            
+            body += '\n\n---\n*This preview will be automatically cleaned up when the PR is closed.*';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Job 7: Cleanup on PR close
+  cleanup-preview:
+    name: Cleanup Preview
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Cleanup Kubernetes resources
+        run: |
+          # Delete Helm release
+          helm uninstall nexus-backend-pr-${{ github.event.number }} --namespace nexus-pr-${{ github.event.number }} || true
+          
+          # Delete namespace
+          kubectl delete namespace nexus-pr-${{ github.event.number }} || true
+
+      - name: Cleanup container images
+        uses: actions/github-script@v6
+        with:
+          script: |
+            try {
+              const { data: packages } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                package_type: 'container',
+                package_name: 'nexus-workspace/backend',
+                org: context.repo.owner
+              });
+              
+              // Find and delete PR-specific images
+              const prImages = packages.filter(pkg => 
+                pkg.metadata?.container?.tags?.some(tag => 
+                  tag.includes(`pr-${{ github.event.number }}`)
+                )
+              );
+              
+              for (const image of prImages) {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  package_type: 'container',
+                  package_name: 'nexus-workspace/backend',
+                  org: context.repo.owner,
+                  package_version_id: image.id
+                });
+              }
+            } catch (error) {
+              console.log('Error cleaning up images:', error.message);
+            }

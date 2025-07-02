@@ -1,0 +1,17 @@
+apiVersion: v2
+name: nexus-backend
+description: Helm chart for Nexus Workspace Backend API
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - nexus
+  - backend
+  - api
+  - nestjs
+home: https://github.com/nexus-workspace/nexus-v4
+sources:
+  - https://github.com/nexus-workspace/nexus-v4
+maintainers:
+  - name: Nexus Team
+    email: team@nexus-workspace.com
