@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for NestJS Backend
 
 # Stage 1: Build stage
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -28,7 +28,7 @@ COPY tsconfig.json ./
 RUN pnpm build --filter=@nexus/backend
 
 # Stage 2: Production stage
-FROM node:18-alpine AS production
+FROM node:24-alpine AS production
 
 # Install security updates
 RUN apk update && apk upgrade && apk add --no-cache dumb-init
