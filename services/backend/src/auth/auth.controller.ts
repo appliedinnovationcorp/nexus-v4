@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger'
 import { AuthService, AuthResponse, AuthTokens } from './auth.service'
+import { LoggerService } from '../common/logger/logger.service'
 import { LoginDto } from './dto/login.dto'
 import { RegisterDto } from './dto/register.dto'
 import { RefreshTokenDto } from './dto/refresh-token.dto'
@@ -23,7 +24,10 @@ import { LocalAuthGuard } from './guards/local-auth.guard'
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly logger: LoggerService,
+  ) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

@@ -3,19 +3,20 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
-  Logger,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { UsersService } from '../users/users.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { LoggerService } from '../common/logger/logger.service'
 import { LoginDto } from './dto/login.dto'
 import { RegisterDto } from './dto/register.dto'
 import { RefreshTokenDto } from './dto/refresh-token.dto'
 import { ChangePasswordDto } from './dto/change-password.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
-import * as bcrypt from 'bcryptjs'
+import { ActivityType } from '@prisma/client'
+import * as bcrypt from 'bcrypt'
 import * as crypto from 'crypto'
 
 export interface JwtPayload {
@@ -52,24 +53,42 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name)
-
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly logger: LoggerService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<any> {
+  async validateUser(email: string, password: string, context?: { requestId?: string; ip?: string }): Promise<any> {
     try {
+      this.logger.debug('Validating user credentials', {
+        requestId: context?.requestId,
+        operation: 'auth.validateUser',
+        metadata: { email, ip: context?.ip },
+      });
+
       const user = await this.usersService.findByEmail(email)
       if (!user) {
+        this.logger.warn('User validation failed - user not found', {
+          requestId: context?.requestId,
+          operation: 'auth.validateUser',
+          metadata: { email, ip: context?.ip },
+        });
         return null
       }
 
       const isPasswordValid = await bcrypt.compare(password, user.passwordHash)
       if (!isPasswordValid) {
+        this.logger.logSecurity('invalid_password_attempt', 'medium', {
+          userId: user.id,
+          email: user.email,
+          ip: context?.ip,
+        }, {
+          requestId: context?.requestId,
+          operation: 'auth.validateUser',
+        });
         return null
       }
 
@@ -79,25 +98,63 @@ export class AuthService {
         data: { lastLoginAt: new Date() },
       })
 
+      this.logger.debug('User validation successful', {
+        requestId: context?.requestId,
+        operation: 'auth.validateUser',
+        userId: user.id,
+        metadata: { email: user.email },
+      });
+
       // Return user without password
       const { passwordHash, ...result } = user
       return result
     } catch (error) {
-      this.logger.error(`Error validating user: ${error.message}`)
+      this.logger.error('Error validating user', error, {
+        requestId: context?.requestId,
+        operation: 'auth.validateUser',
+        metadata: { email, ip: context?.ip },
+      });
       return null
     }
   }
 
-  async login(loginDto: LoginDto): Promise<AuthResponse> {
+  async login(loginDto: LoginDto, context?: { requestId?: string; ip?: string; userAgent?: string }): Promise<AuthResponse> {
     const { email, password } = loginDto
 
-    const user = await this.validateUser(email, password)
+    this.logger.info('User login attempt', {
+      requestId: context?.requestId,
+      operation: 'auth.login',
+      metadata: { 
+        email,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+      },
+    });
+
+    const user = await this.validateUser(email, password, context)
     if (!user) {
+      this.logger.logSecurity('login_failed_invalid_credentials', 'medium', {
+        email,
+        ip: context?.ip,
+        userAgent: context?.userAgent,
+      }, {
+        requestId: context?.requestId,
+        operation: 'auth.login',
+      });
       throw new UnauthorizedException('Invalid credentials')
     }
 
     // Check if user account is active
     if (user.status !== 'ACTIVE') {
+      this.logger.logSecurity('login_attempt_inactive_account', 'medium', {
+        userId: user.id,
+        email: user.email,
+        status: user.status,
+        ip: context?.ip,
+      }, {
+        requestId: context?.requestId,
+        operation: 'auth.login',
+      });
       throw new UnauthorizedException('Account is not active')
     }
 
@@ -107,7 +164,18 @@ export class AuthService {
     await this.storeRefreshToken(user.id, tokens.refreshToken)
 
     // Log successful login
-    await this.logActivity(user.id, 'LOGIN', 'User logged in successfully')
+    await this.logActivity(user.id, ActivityType.LOGIN, 'User logged in successfully')
+
+    this.logger.logAuth('user_logged_in', user.id, {
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      ip: context?.ip,
+      userAgent: context?.userAgent,
+    }, {
+      requestId: context?.requestId,
+      operation: 'auth.login',
+    });
 
     return {
       user: {
@@ -124,7 +192,16 @@ export class AuthService {
     }
   }
 
-  async register(registerDto: RegisterDto): Promise<AuthResponse> {
+  async register(registerDto: RegisterDto, context?: { requestId?: string }): Promise<AuthResponse> {
+    this.logger.info('User registration attempt', {
+      requestId: context?.requestId,
+      operation: 'auth.register',
+      metadata: { 
+        email: registerDto.email, 
+        username: registerDto.username,
+      },
+    });
+
     try {
       // Check if user already exists
       const existingUser = await this.prisma.user.findFirst({
@@ -137,6 +214,16 @@ export class AuthService {
       })
 
       if (existingUser) {
+        this.logger.warn('Registration failed - user already exists', {
+          requestId: context?.requestId,
+          operation: 'auth.register',
+          metadata: { 
+            email: registerDto.email, 
+            username: registerDto.username,
+            existingField: existingUser.email === registerDto.email ? 'email' : 'username',
+          },
+        });
+
         if (existingUser.email === registerDto.email) {
           throw new ConflictException('Email already exists')
         }
@@ -157,7 +244,25 @@ export class AuthService {
       await this.storeRefreshToken(user.id, tokens.refreshToken)
 
       // Log successful registration
-      await this.logActivity(user.id, 'REGISTER', 'User registered successfully')
+      await this.logActivity(user.id, ActivityType.REGISTER, 'User registered successfully')
+
+      this.logger.logAuth('user_registered', user.id, {
+        email: user.email,
+        username: user.username,
+        role: user.role,
+      }, {
+        requestId: context?.requestId,
+        operation: 'auth.register',
+      });
+
+      this.logger.logBusinessEvent('user_registration_completed', {
+        userId: user.id,
+        email: user.email,
+        username: user.username,
+      }, {
+        requestId: context?.requestId,
+        userId: user.id,
+      });
 
       return {
         user: {
@@ -176,13 +281,25 @@ export class AuthService {
       if (error instanceof ConflictException) {
         throw error
       }
-      this.logger.error(`Registration error: ${error.message}`)
+      this.logger.error('Registration failed', error, {
+        requestId: context?.requestId,
+        operation: 'auth.register',
+        metadata: { 
+          email: registerDto.email, 
+          username: registerDto.username,
+        },
+      });
       throw new BadRequestException('Registration failed')
     }
   }
 
-  async refreshToken(refreshTokenDto: RefreshTokenDto): Promise<AuthTokens> {
+  async refreshToken(refreshTokenDto: RefreshTokenDto, context?: { requestId?: string }): Promise<AuthTokens> {
     const { refreshToken } = refreshTokenDto
+
+    this.logger.debug('Token refresh attempt', {
+      requestId: context?.requestId,
+      operation: 'auth.refreshToken',
+    });
 
     try {
       // Verify refresh token
@@ -202,6 +319,12 @@ export class AuthService {
       })
 
       if (!storedToken) {
+        this.logger.logSecurity('refresh_token_invalid', 'medium', {
+          userId: payload.sub,
+        }, {
+          requestId: context?.requestId,
+          operation: 'auth.refreshToken',
+        });
         throw new UnauthorizedException('Invalid refresh token')
       }
 
@@ -216,14 +339,32 @@ export class AuthService {
 
       await this.storeRefreshToken(storedToken.userId, tokens.refreshToken)
 
+      this.logger.logAuth('token_refreshed', storedToken.userId, {
+        email: storedToken.user.email,
+      }, {
+        requestId: context?.requestId,
+        operation: 'auth.refreshToken',
+      });
+
       return tokens
     } catch (error) {
-      this.logger.error(`Refresh token error: ${error.message}`)
+      this.logger.logSecurity('refresh_token_error', 'medium', {
+        error: error.message,
+      }, {
+        requestId: context?.requestId,
+        operation: 'auth.refreshToken',
+      });
       throw new UnauthorizedException('Invalid refresh token')
     }
   }
 
-  async logout(userId: string, refreshToken?: string): Promise<void> {
+  async logout(userId: string, refreshToken?: string, context?: { requestId?: string }): Promise<void> {
+    this.logger.info('User logout', {
+      requestId: context?.requestId,
+      operation: 'auth.logout',
+      userId,
+    });
+
     try {
       // Revoke refresh token if provided
       if (refreshToken) {
@@ -243,17 +384,33 @@ export class AuthService {
       }
 
       // Log logout activity
-      await this.logActivity(userId, 'LOGOUT', 'User logged out')
+      await this.logActivity(userId, ActivityType.LOGOUT, 'User logged out')
+
+      this.logger.logAuth('user_logged_out', userId, {}, {
+        requestId: context?.requestId,
+        operation: 'auth.logout',
+      });
     } catch (error) {
-      this.logger.error(`Logout error: ${error.message}`)
+      this.logger.error('Logout error', error, {
+        requestId: context?.requestId,
+        operation: 'auth.logout',
+        userId,
+      });
     }
   }
 
   async changePassword(
     userId: string,
     changePasswordDto: ChangePasswordDto,
+    context?: { requestId?: string },
   ): Promise<void> {
     const { currentPassword, newPassword } = changePasswordDto
+
+    this.logger.info('Password change attempt', {
+      requestId: context?.requestId,
+      operation: 'auth.changePassword',
+      userId,
+    });
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -289,7 +446,7 @@ export class AuthService {
     })
 
     // Log password change
-    await this.logActivity(userId, 'PASSWORD_CHANGE', 'Password changed successfully')
+    await this.logActivity(userId, ActivityType.PASSWORD_CHANGE, 'Password changed successfully')
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
@@ -363,7 +520,7 @@ export class AuthService {
     // Log password reset
     await this.logActivity(
       passwordReset.userId,
-      'PASSWORD_RESET',
+      ActivityType.PASSWORD_CHANGE,
       'Password reset successfully',
     )
   }
@@ -441,7 +598,7 @@ export class AuthService {
 
   private async logActivity(
     userId: string,
-    type: string,
+    type: ActivityType,
     description: string,
   ): Promise<void> {
     try {
