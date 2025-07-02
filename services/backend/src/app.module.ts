@@ -16,6 +16,10 @@ import { RequestLoggerMiddleware } from './common/logger/request-logger.middlewa
 import { CorrelationIdMiddleware } from './common/logger/correlation-id.middleware';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { SentryModule } from './common/sentry/sentry.module';
+import { SentryService } from './common/sentry/sentry.service';
+import { SentryInterceptor } from './common/sentry/sentry.interceptor';
+import { SentryExceptionFilter } from './common/sentry/sentry.filter';
 import { validate } from './config/env.config';
 
 @Module({
@@ -26,6 +30,7 @@ import { validate } from './config/env.config';
       envFilePath: ['.env.local', '.env'],
     }),
     LoggerModule,
+    SentryModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 1 minute
@@ -42,6 +47,7 @@ import { validate } from './config/env.config';
   providers: [
     AppService,
     LoggerService,
+    SentryService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
@@ -51,8 +57,16 @@ import { validate } from './config/env.config';
       useClass: LoggingInterceptor,
     },
     {
+      provide: APP_INTERCEPTOR,
+      useClass: SentryInterceptor,
+    },
+    {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: SentryExceptionFilter,
     },
   ],
 })

@@ -30,12 +30,63 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  JWT_SECRET: string =
-    'dda1b89507fd4faba1ba488380129ff48820e4cbe02cd484e023a1800d0f5a36';
+  JWT_SECRET: string = 'super-secret-jwt-key-for-development-only';
 
-  @IsNumber()
+  @IsString()
   @IsOptional()
-  JWT_EXPIRES_IN: number = 3600;
+  JWT_REFRESH_SECRET: string = 'super-secret-refresh-key-for-development-only';
+
+  @IsString()
+  @IsOptional()
+  JWT_EXPIRES_IN: string = '15m';
+
+  @IsString()
+  @IsOptional()
+  JWT_REFRESH_EXPIRES_IN: string = '7d';
+
+  @IsString()
+  @IsOptional()
+  JWT_ISSUER: string = 'nexus-api';
+
+  @IsString()
+  @IsOptional()
+  JWT_AUDIENCE: string = 'nexus-app';
+
+  // Sentry Configuration
+  @IsString()
+  @IsOptional()
+  SENTRY_DSN?: string;
+
+  @IsString()
+  @IsOptional()
+  SENTRY_RELEASE?: string;
+
+  @IsString()
+  @IsOptional()
+  SENTRY_ORG?: string;
+
+  @IsString()
+  @IsOptional()
+  SENTRY_PROJECT?: string;
+
+  @IsString()
+  @IsOptional()
+  SENTRY_AUTH_TOKEN?: string;
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true')
+  @IsOptional()
+  SENTRY_DEBUG?: boolean = false;
+
+  // Logging Configuration
+  @IsString()
+  @IsOptional()
+  LOG_LEVEL: string = 'info';
+
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true')
+  @IsOptional()
+  ENABLE_ERROR_TRACKING: boolean = true;
 }
 
 export const validate = (config: Record<string, unknown>) => {

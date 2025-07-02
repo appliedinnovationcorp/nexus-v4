@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable standalone output for Docker deployment
@@ -125,4 +127,36 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Sentry webpack plugin options
+const sentryWebpackPluginOptions = {
+  // Additional config options for the Sentry webpack plugin. Keep in mind that
+  // the following options are set automatically, and overriding them is not
+  // recommended:
+  //   release, url, configFile, stripPrefix, urlPrefix, include, ignore
+  
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  
+  // An auth token is required for uploading source maps.
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  
+  silent: true, // Suppresses source map uploading logs during build
+  
+  // Upload source maps during build
+  widenClientFileUpload: true,
+  
+  // Automatically create releases and associate commits
+  setCommits: {
+    auto: true,
+    ignoreMissing: true,
+    ignoreEmpty: true,
+  },
+  
+  // Deploy notifications
+  deploy: {
+    env: process.env.NODE_ENV || 'development',
+  },
+};
+
+// Export the config wrapped with Sentry
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
