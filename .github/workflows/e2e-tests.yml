@@ -1,0 +1,185 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - smoke
+          - regression
+          - visual
+          - mobile
+          - api
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  # Smoke tests - run on every PR
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event.inputs.test_suite == 'smoke' || github.event.inputs.test_suite == 'all'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: nexus_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build applications
+        run: |
+          pnpm build
+        env:
+          NODE_ENV: test
+
+      - name: Setup test database
+        run: |
+          cd services/backend
+          pnpm prisma migrate deploy
+          pnpm prisma db seed
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/nexus_test
+
+      - name: Start applications
+        run: |
+          # Start backend
+          cd services/backend
+          pnpm start &
+          
+          # Start frontend
+          cd ../../apps/frontend
+          pnpm start &
+          
+          # Wait for services to be ready
+          sleep 30
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5432/nexus_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-jwt-secret-for-ci-only
+          JWT_REFRESH_SECRET: test-refresh-secret-for-ci-only
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api
+
+      - name: Install Playwright browsers
+        run: |
+          cd tests/e2e
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        run: |
+          cd tests/e2e
+          pnpm test:smoke
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          E2E_API_URL: http://localhost:3001/api
+          E2E_DATABASE_URL: postgresql://test:test@localhost:5432/nexus_test
+          E2E_TEST_USER_EMAIL: test@example.com
+          E2E_TEST_USER_PASSWORD: TestPassword123!
+          E2E_HEADLESS: true
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-results
+          path: |
+            tests/e2e/test-results/
+            tests/e2e/playwright-report/
+          retention-days: 7
+
+  # Test summary and notifications
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [smoke-tests]
+    if: always()
+    
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+
+      - name: Generate test summary
+        run: |
+          echo "# E2E Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job results
+          if [[ "${{ needs.smoke-tests.result }}" == "success" ]]; then
+            echo "✅ Smoke Tests: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Smoke Tests: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Test Artifacts**: Check the Actions tab for detailed reports and screenshots" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "E2E tests failed. Please check the test results and fix any issues."

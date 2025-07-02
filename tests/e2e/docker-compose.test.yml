@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  # Test Database
+  test-db:
+    image: postgres:15-alpine
+    container_name: nexus-test-db
+    environment:
+      POSTGRES_DB: nexus_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_db_data:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d nexus_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Redis (optional)
+  test-redis:
+    image: redis:7-alpine
+    container_name: nexus-test-redis
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - test_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Backend Service for Testing
+  backend-test:
+    build:
+      context: ../../services/backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: nexus-backend-test
+    environment:
+      NODE_ENV: test
+      PORT: 3001
+      DATABASE_URL: postgresql://test:test@test-db:5432/nexus_test
+      REDIS_URL: redis://test-redis:6379
+      JWT_SECRET: test-jwt-secret-for-e2e-testing-only-not-for-production-use
+      JWT_REFRESH_SECRET: test-refresh-secret-for-e2e-testing-only-not-for-production-use
+      CORS_ORIGIN: http://frontend-test:3000
+      LOG_LEVEL: warn
+      ENABLE_SWAGGER: false
+    ports:
+      - "3001:3001"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+    volumes:
+      - ../../services/backend:/app
+      - /app/node_modules
+    command: ["pnpm", "dev"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - test-network
+
+  # Frontend Service for Testing
+  frontend-test:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: nexus-frontend-test
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://backend-test:3001/api
+      NEXT_PUBLIC_APP_NAME: Nexus Test
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend-test:
+        condition: service_healthy
+    volumes:
+      - ../../apps/frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: ["pnpm", "dev"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - test-network
+
+  # E2E Test Runner
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    container_name: nexus-e2e-tests
+    environment:
+      E2E_BASE_URL: http://frontend-test:3000
+      E2E_API_URL: http://backend-test:3001/api
+      E2E_DATABASE_URL: postgresql://test:test@test-db:5432/nexus_test
+      E2E_TEST_USER_EMAIL: test@example.com
+      E2E_TEST_USER_PASSWORD: TestPassword123!
+      E2E_HEADLESS: true
+      CI: true
+    volumes:
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+    depends_on:
+      frontend-test:
+        condition: service_healthy
+      backend-test:
+        condition: service_healthy
+    command: ["pnpm", "test"]
+    networks:
+      - test-network
+
+  # Mail Server for Testing Email Flows
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: nexus-test-mail
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - test-network
+
+volumes:
+  test_db_data:
+  test_redis_data:
+
+networks:
+  test-network:
+    driver: bridge

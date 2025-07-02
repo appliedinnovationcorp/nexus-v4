@@ -1,0 +1,50 @@
+# Test Results
+test-results/
+playwright-report/
+playwright/.auth/
+test-uploads/
+
+# Environment files
+.env
+.env.local
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Temporary folders
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Screenshots and videos (keep examples)
+test-results/**/*.png
+test-results/**/*.webm
+!test-results/example-*.png

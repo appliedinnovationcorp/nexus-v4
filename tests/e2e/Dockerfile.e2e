@@ -1,0 +1,31 @@
+# E2E Testing Dockerfile
+FROM mcr.microsoft.com/playwright:v1.48.2-focal
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* ./
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy test files
+COPY . .
+
+# Create directories for test results
+RUN mkdir -p test-results playwright-report playwright/.auth test-uploads
+
+# Install Playwright browsers
+RUN pnpm exec playwright install
+
+# Set environment variables
+ENV NODE_ENV=test
+ENV CI=true
+ENV E2E_HEADLESS=true
+
+# Default command
+CMD ["pnpm", "test"]

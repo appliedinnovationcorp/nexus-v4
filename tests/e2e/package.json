@@ -1,0 +1,49 @@
+{
+  "name": "@nexus/e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-End testing suite for Nexus Workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report",
+    "test:trace": "playwright show-trace",
+    "test:codegen": "playwright codegen",
+    "test:install": "playwright install",
+    "test:install-deps": "playwright install-deps",
+    "test:docker": "docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit",
+    "test:ci": "playwright test --reporter=github",
+    "test:parallel": "playwright test --workers=4",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:regression": "playwright test --grep @regression",
+    "test:auth": "playwright test tests/auth/",
+    "test:user-journey": "playwright test tests/user-journeys/",
+    "test:api": "playwright test tests/api/",
+    "lint": "eslint . --ext .ts,.js",
+    "lint:fix": "eslint . --ext .ts,.js --fix",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.48.2",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "e2e",
+    "testing",
+    "playwright",
+    "automation",
+    "nexus"
+  ],
+  "author": "Nexus Team",
+  "license": "ISC"
+}
