@@ -1,0 +1,376 @@
+version: "1.0"
+
+# PostHog Configuration
+posthog:
+  apiKey: "${POSTHOG_API_KEY}"
+  host: "${POSTHOG_HOST:-https://app.posthog.com}"
+  options:
+    capture_pageview: false
+    capture_pageleave: true
+    disable_session_recording: false
+    session_recording:
+      maskAllInputs: true
+      maskInputOptions:
+        password: true
+        email: false
+      blockClass: "ph-no-capture"
+      blockSelector: "[data-ph-no-capture]"
+    autocapture:
+      dom_event_allowlist: ["click", "change", "submit"]
+      element_allowlist: ["a", "button", "form", "input", "select", "textarea", "label"]
+    cross_subdomain_cookie: true
+    secure_cookie: true
+    persistence: "localStorage+cookie"
+
+# Mixpanel Configuration
+mixpanel:
+  token: "${MIXPANEL_TOKEN}"
+  options:
+    debug: false
+    track_pageview: false
+    persistence: "localStorage"
+    secure_cookie: true
+    cross_subdomain_cookie: true
+    ignore_dnt: false
+    ip: false
+
+# Global Settings
+global:
+  enabled: true
+  environment: "${NODE_ENV:-production}"
+  debug: "${ANALYTICS_DEBUG:-false}"
+  consent:
+    required: true
+    categories:
+      - "analytics"
+      - "performance"
+      - "functional"
+  retention:
+    days: 365
+    autoDelete: true
+
+# Event Configuration
+events:
+  # User Events
+  user_signup:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "conversion"
+      business_impact: "high"
+  
+  user_login:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+  
+  user_logout:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+
+  # Feature Usage Events
+  feature_used:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "engagement"
+  
+  feature_completion:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "conversion"
+
+  # Navigation Events
+  page_view:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "navigation"
+  
+  # Engagement Events
+  user_engagement:
+    enabled: true
+    sampleRate: 0.1  # Sample 10% of engagement events
+    posthog: true
+    mixpanel: false  # Don't send to Mixpanel to reduce volume
+  
+  button_click:
+    enabled: true
+    sampleRate: 0.5
+    posthog: true
+    mixpanel: true
+  
+  form_interaction:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+
+  # Conversion Events
+  conversion:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "conversion"
+      business_impact: "high"
+  
+  funnel_step:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+  
+  # Error Events
+  error_occurred:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "error"
+      requires_attention: true
+  
+  # Performance Events
+  performance_metric:
+    enabled: true
+    sampleRate: 0.1
+    posthog: true
+    mixpanel: false
+    customProperties:
+      event_type: "performance"
+
+  # Business Events
+  api_usage:
+    enabled: true
+    sampleRate: 0.01  # Sample 1% of API calls
+    posthog: true
+    mixpanel: false
+  
+  secret_accessed:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: true
+    customProperties:
+      event_type: "security"
+      business_impact: "medium"
+    piiScrubbing:
+      enabled: true
+      fields: ["secret_name", "secret_value", "vault_path"]
+
+  # Design System Events
+  component_used:
+    enabled: true
+    sampleRate: 0.1
+    posthog: true
+    mixpanel: false
+    customProperties:
+      event_type: "design_system"
+  
+  storybook_interaction:
+    enabled: true
+    sampleRate: 1.0
+    posthog: true
+    mixpanel: false
+
+# User Configuration
+user:
+  autoIdentify: true
+  properties:
+    - "role"
+    - "plan"
+    - "signupDate"
+    - "lastActiveDate"
+    - "totalSessions"
+    - "preferredLanguage"
+    - "timezone"
+  anonymous:
+    enabled: true
+    sessionTimeout: 30  # minutes
+
+# Privacy Settings
+privacy:
+  ipAddress: "anonymize"
+  geolocation: "city"
+  cookies:
+    enabled: true
+    sameSite: "lax"
+    secure: true
+
+# Feature-Specific Tracking
+features:
+  authentication:
+    trackLoginAttempts: true
+    trackPasswordResets: true
+    trackMfaUsage: true
+    trackSocialLogins: true
+  
+  dashboard:
+    trackWidgetInteractions: true
+    trackCustomizations: true
+    trackDataRefresh: true
+    trackExports: true
+  
+  api_management:
+    trackEndpointUsage: true
+    trackRateLimiting: true
+    trackErrorRates: true
+    trackResponseTimes: true
+  
+  secret_management:
+    trackSecretCreation: true
+    trackSecretAccess: true
+    trackSecretRotation: true
+    trackVaultOperations: true
+    piiProtection: true
+  
+  design_system:
+    trackComponentUsage: true
+    trackStorybookViews: true
+    trackDesignTokenUsage: true
+    trackThemeChanges: true
+  
+  monitoring:
+    trackDashboardViews: true
+    trackAlertInteractions: true
+    trackMetricQueries: true
+    trackSloViews: true
+
+# Funnel Definitions
+funnels:
+  user_onboarding:
+    name: "User Onboarding"
+    steps:
+      - "signup_started"
+      - "email_verified"
+      - "profile_completed"
+      - "first_login"
+      - "dashboard_viewed"
+      - "first_feature_used"
+    conversionWindow: 7  # days
+  
+  feature_adoption:
+    name: "Feature Adoption"
+    steps:
+      - "feature_discovered"
+      - "feature_clicked"
+      - "feature_configured"
+      - "feature_used"
+      - "feature_mastered"
+    conversionWindow: 30  # days
+  
+  api_integration:
+    name: "API Integration"
+    steps:
+      - "api_docs_viewed"
+      - "api_key_generated"
+      - "first_api_call"
+      - "successful_integration"
+      - "production_usage"
+    conversionWindow: 14  # days
+
+# Cohort Definitions
+cohorts:
+  power_users:
+    name: "Power Users"
+    criteria:
+      - "sessions_per_week >= 5"
+      - "features_used >= 10"
+      - "api_calls_per_day >= 100"
+  
+  new_users:
+    name: "New Users"
+    criteria:
+      - "signup_date >= 7_days_ago"
+      - "total_sessions <= 5"
+  
+  at_risk_users:
+    name: "At Risk Users"
+    criteria:
+      - "last_active_date >= 14_days_ago"
+      - "total_sessions >= 3"
+      - "plan != 'free'"
+
+# A/B Test Configuration
+experiments:
+  enabled: true
+  defaultVariant: "control"
+  trackingEvents:
+    - "experiment_viewed"
+    - "experiment_converted"
+  
+# Integration Settings
+integrations:
+  segment:
+    enabled: false
+    writeKey: "${SEGMENT_WRITE_KEY}"
+  
+  amplitude:
+    enabled: false
+    apiKey: "${AMPLITUDE_API_KEY}"
+  
+  google_analytics:
+    enabled: false
+    trackingId: "${GA_TRACKING_ID}"
+  
+  hotjar:
+    enabled: false
+    siteId: "${HOTJAR_SITE_ID}"
+
+# Data Quality
+dataQuality:
+  validation:
+    enabled: true
+    strictMode: false
+    requiredFields:
+      - "sessionId"
+      - "timestamp"
+  
+  sampling:
+    enabled: true
+    defaultRate: 1.0
+    highVolumeEvents:
+      user_engagement: 0.1
+      performance_metric: 0.1
+      api_usage: 0.01
+  
+  deduplication:
+    enabled: true
+    windowSize: 5000  # milliseconds
+    keyFields:
+      - "event"
+      - "userId"
+      - "sessionId"
+
+# Alerting
+alerting:
+  enabled: true
+  thresholds:
+    errorRate: 0.05  # 5% error rate
+    performanceDegradation: 2000  # 2 second response time
+    lowEngagement: 0.1  # 10% engagement rate
+  
+  notifications:
+    slack:
+      enabled: false
+      webhook: "${SLACK_WEBHOOK_URL}"
+    
+    email:
+      enabled: false
+      recipients:
+        - "analytics@nexus.dev"
+        - "product@nexus.dev"

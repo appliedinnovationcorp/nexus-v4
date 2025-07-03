@@ -1,0 +1,556 @@
+name: Analytics Monitoring & Insights
+
+on:
+  schedule:
+    # Generate daily analytics reports at 8 AM UTC
+    - cron: '0 8 * * *'
+    # Generate weekly insights on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+    # Generate monthly deep analysis on 1st of month at 10 AM UTC
+    - cron: '0 10 1 * *'
+  workflow_dispatch:
+    inputs:
+      analysis_type:
+        description: 'Type of analysis to run'
+        required: true
+        default: 'features'
+        type: choice
+        options:
+          - 'features'
+          - 'users'
+          - 'funnels'
+          - 'all'
+      days:
+        description: 'Number of days to analyze'
+        required: false
+        default: '30'
+        type: string
+      generate_report:
+        description: 'Generate detailed report'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  # Validate analytics configuration
+  validate-analytics-config:
+    runs-on: ubuntu-latest
+    name: Validate Analytics Configuration
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/analytics
+          pnpm install
+
+      - name: Validate analytics configuration
+        run: |
+          cd packages/analytics
+          echo "=== Validating Analytics Configuration ==="
+          
+          # Check if config file exists
+          if [ ! -f "configs/analytics-config.yaml" ]; then
+            echo "❌ Analytics configuration file not found"
+            exit 1
+          fi
+          
+          # Validate YAML syntax
+          if ! python3 -c "import yaml; yaml.safe_load(open('configs/analytics-config.yaml'))" 2>/dev/null; then
+            echo "❌ Invalid YAML syntax in analytics configuration"
+            exit 1
+          fi
+          
+          echo "✅ Analytics configuration is valid"
+          
+          # Run custom validation script
+          node scripts/validate-events.js
+          
+          echo "🎉 All analytics validations passed!"
+
+  # Analyze feature usage
+  analyze-feature-usage:
+    runs-on: ubuntu-latest
+    name: Analyze Feature Usage
+    needs: validate-analytics-config
+    if: github.event.inputs.analysis_type == 'features' || github.event.inputs.analysis_type == 'all' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/analytics
+          pnpm install
+
+      - name: Analyze feature usage
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          ANALYSIS_DAYS: ${{ github.event.inputs.days || '30' }}
+        run: |
+          cd packages/analytics
+          echo "=== Analyzing Feature Usage ==="
+          
+          # Determine analysis period based on schedule
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "0 8 * * *" ]; then
+              # Daily analysis
+              ANALYSIS_DAYS=1
+              ANALYSIS_TYPE="daily"
+            elif [ "${{ github.event.schedule }}" = "0 9 * * 1" ]; then
+              # Weekly analysis
+              ANALYSIS_DAYS=7
+              ANALYSIS_TYPE="weekly"
+            elif [ "${{ github.event.schedule }}" = "0 10 1 * *" ]; then
+              # Monthly analysis
+              ANALYSIS_DAYS=30
+              ANALYSIS_TYPE="monthly"
+            fi
+          else
+            ANALYSIS_TYPE="manual"
+          fi
+          
+          echo "Running $ANALYSIS_TYPE feature usage analysis for $ANALYSIS_DAYS days"
+          
+          # Run feature usage analysis
+          node scripts/analyze-usage.js features --days $ANALYSIS_DAYS
+          
+          echo "✅ Feature usage analysis completed"
+
+      - name: Upload feature analysis results
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-usage-analysis-${{ github.run_number }}
+          path: packages/analytics/reports/feature-usage-*.json
+          retention-days: 90
+
+  # Analyze user behavior
+  analyze-user-behavior:
+    runs-on: ubuntu-latest
+    name: Analyze User Behavior
+    needs: validate-analytics-config
+    if: github.event.inputs.analysis_type == 'users' || github.event.inputs.analysis_type == 'all' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/analytics
+          pnpm install
+
+      - name: Analyze user behavior
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          ANALYSIS_DAYS: ${{ github.event.inputs.days || '30' }}
+        run: |
+          cd packages/analytics
+          echo "=== Analyzing User Behavior ==="
+          
+          # Run user behavior analysis
+          node scripts/analyze-usage.js users --days $ANALYSIS_DAYS
+          
+          echo "✅ User behavior analysis completed"
+
+      - name: Upload user behavior analysis results
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-behavior-analysis-${{ github.run_number }}
+          path: packages/analytics/reports/user-behavior-*.json
+          retention-days: 90
+
+  # Analyze conversion funnels
+  analyze-funnels:
+    runs-on: ubuntu-latest
+    name: Analyze Conversion Funnels
+    needs: validate-analytics-config
+    if: github.event.inputs.analysis_type == 'funnels' || github.event.inputs.analysis_type == 'all' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/analytics
+          pnpm install
+
+      - name: Analyze conversion funnels
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          ANALYSIS_DAYS: ${{ github.event.inputs.days || '30' }}
+        run: |
+          cd packages/analytics
+          echo "=== Analyzing Conversion Funnels ==="
+          
+          # Run funnel analysis
+          node scripts/analyze-usage.js funnels --days $ANALYSIS_DAYS
+          
+          echo "✅ Funnel analysis completed"
+
+      - name: Upload funnel analysis results
+        uses: actions/upload-artifact@v4
+        with:
+          name: funnel-analysis-${{ github.run_number }}
+          path: packages/analytics/reports/funnel-analysis-*.json
+          retention-days: 90
+
+  # Generate comprehensive insights report
+  generate-insights-report:
+    runs-on: ubuntu-latest
+    name: Generate Analytics Insights Report
+    needs: [analyze-feature-usage, analyze-user-behavior, analyze-funnels]
+    if: always() && (github.event.inputs.generate_report == 'true' || github.event_name == 'schedule')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/analytics
+          pnpm install
+
+      - name: Download analysis results
+        uses: actions/download-artifact@v4
+        with:
+          path: packages/analytics/reports/
+          merge-multiple: true
+
+      - name: Generate comprehensive insights report
+        run: |
+          cd packages/analytics
+          echo "=== Generating Comprehensive Insights Report ==="
+          
+          # Create comprehensive report combining all analyses
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+          
+          const reportDir = './reports';
+          const files = fs.readdirSync(reportDir).filter(f => f.endsWith('.json'));
+          
+          const report = {
+            metadata: {
+              reportId: 'comprehensive-insights-' + Date.now(),
+              generatedAt: new Date().toISOString(),
+              period: '30 days',
+              analysisTypes: []
+            },
+            summary: {
+              totalInsights: 0,
+              criticalIssues: 0,
+              opportunities: 0,
+              recommendations: 0
+            },
+            insights: [],
+            recommendations: [],
+            keyMetrics: {}
+          };
+          
+          // Process each analysis file
+          files.forEach(file => {
+            try {
+              const data = JSON.parse(fs.readFileSync(path.join(reportDir, file), 'utf8'));
+              
+              if (file.includes('feature-usage')) {
+                report.metadata.analysisTypes.push('feature-usage');
+                if (data.insights) report.insights.push(...data.insights);
+                if (data.recommendations) report.recommendations.push(...data.recommendations);
+                report.keyMetrics.features = data.summary;
+              } else if (file.includes('user-behavior')) {
+                report.metadata.analysisTypes.push('user-behavior');
+                if (data.insights) report.insights.push(...data.insights);
+                report.keyMetrics.users = data.summary;
+              } else if (file.includes('funnel')) {
+                report.metadata.analysisTypes.push('funnel-analysis');
+                if (data.insights) report.insights.push(...data.insights);
+                if (data.recommendations) report.recommendations.push(...data.recommendations);
+                report.keyMetrics.funnels = data.funnels;
+              }
+            } catch (error) {
+              console.error('Error processing file:', file, error.message);
+            }
+          });
+          
+          // Update summary
+          report.summary.totalInsights = report.insights.length;
+          report.summary.criticalIssues = report.insights.filter(i => i.type === 'error').length;
+          report.summary.opportunities = report.insights.filter(i => i.type === 'success').length;
+          report.summary.recommendations = report.recommendations.length;
+          
+          // Save comprehensive report
+          fs.writeFileSync('./reports/comprehensive-insights-report.json', JSON.stringify(report, null, 2));
+          console.log('Comprehensive insights report generated');
+          "
+          
+          echo "✅ Comprehensive insights report generated"
+
+      - name: Create insights summary for GitHub
+        id: create-summary
+        run: |
+          cd packages/analytics
+          
+          if [ -f "reports/comprehensive-insights-report.json" ]; then
+            # Extract key metrics for GitHub summary
+            node -e "
+            const report = JSON.parse(require('fs').readFileSync('./reports/comprehensive-insights-report.json', 'utf8'));
+            
+            console.log('INSIGHTS_COUNT=' + report.summary.totalInsights);
+            console.log('CRITICAL_ISSUES=' + report.summary.criticalIssues);
+            console.log('RECOMMENDATIONS=' + report.summary.recommendations);
+            console.log('ANALYSIS_TYPES=' + report.metadata.analysisTypes.join(','));
+            " >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub issue for critical insights
+        if: steps.create-summary.outputs.CRITICAL_ISSUES > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const report = JSON.parse(fs.readFileSync('packages/analytics/reports/comprehensive-insights-report.json', 'utf8'));
+              
+              const criticalInsights = report.insights.filter(i => i.type === 'error');
+              const highPriorityRecommendations = report.recommendations.filter(r => r.priority === 'high');
+              
+              const issueTitle = '📊 Critical Analytics Insights Detected';
+              const issueBody = `
+              # Critical Analytics Insights
+              
+              **Detection Time:** ${new Date().toISOString()}
+              **Analysis Period:** ${report.metadata.period}
+              **Analysis Types:** ${report.metadata.analysisTypes.join(', ')}
+              
+              ## 🚨 Critical Issues (${criticalInsights.length})
+              
+              ${criticalInsights.map(insight => `
+              ### ${insight.title}
+              ${insight.description}
+              ${insight.data ? '**Data:** ' + JSON.stringify(insight.data) : ''}
+              `).join('\n')}
+              
+              ## 🎯 High Priority Recommendations (${highPriorityRecommendations.length})
+              
+              ${highPriorityRecommendations.map(rec => `
+              ### ${rec.title}
+              **Category:** ${rec.category}
+              **Description:** ${rec.description}
+              
+              **Actions:**
+              ${rec.actions.map(action => '- ' + action).join('\n')}
+              `).join('\n')}
+              
+              ## 📈 Key Metrics
+              
+              ${report.keyMetrics.features ? `
+              **Features:**
+              - Total Features: ${report.keyMetrics.features.totalFeatures}
+              - Active Features: ${report.keyMetrics.features.activeFeatures}
+              - Underutilized Features: ${report.keyMetrics.features.underutilizedFeatures}
+              ` : ''}
+              
+              ${report.keyMetrics.users ? `
+              **Users:**
+              - Total Users: ${report.keyMetrics.users.totalUsers}
+              - Active Users: ${report.keyMetrics.users.activeUsers}
+              - Power Users: ${report.keyMetrics.users.powerUsers}
+              - At Risk Users: ${report.keyMetrics.users.atRiskUsers}
+              ` : ''}
+              
+              ## 🔗 Resources
+              
+              - [Analytics Dashboard](https://posthog.nexus.dev)
+              - [Product Analytics Guide](https://docs.nexus.dev/analytics)
+              - [Feature Usage Reports](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              
+              ---
+              *This issue was automatically created by the analytics monitoring workflow.*
+              `;
+              
+              // Check if similar issue already exists
+              const existingIssues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['analytics', 'insights', 'critical'],
+                state: 'open'
+              });
+              
+              if (existingIssues.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: issueBody,
+                  labels: ['analytics', 'insights', 'critical', 'product'],
+                  assignees: ['@nexus-team/product-team']
+                });
+              } else {
+                // Update existing issue
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssues.data[0].number,
+                  body: `## Updated Critical Insights (${new Date().toISOString()})\n\n${criticalInsights.length} critical issues detected in latest analysis.`
+                });
+              }
+            } catch (error) {
+              console.error('Error creating issue:', error);
+            }
+
+      - name: Upload comprehensive report
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehensive-insights-report-${{ github.run_number }}
+          path: packages/analytics/reports/comprehensive-insights-report.json
+          retention-days: 365
+
+  # Analytics monitoring summary
+  analytics-monitoring-summary:
+    runs-on: ubuntu-latest
+    name: Analytics Monitoring Summary
+    needs: [validate-analytics-config, analyze-feature-usage, analyze-user-behavior, analyze-funnels, generate-insights-report]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 📊 Analytics Monitoring Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job results
+          if [ "${{ needs.validate-analytics-config.result }}" == "success" ]; then
+            echo "✅ **Configuration Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Configuration Validation**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.analyze-feature-usage.result }}" == "success" ]; then
+            echo "✅ **Feature Usage Analysis**: Completed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.analyze-feature-usage.result }}" == "skipped" ]; then
+            echo "⏭️ **Feature Usage Analysis**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Feature Usage Analysis**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.analyze-user-behavior.result }}" == "success" ]; then
+            echo "✅ **User Behavior Analysis**: Completed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.analyze-user-behavior.result }}" == "skipped" ]; then
+            echo "⏭️ **User Behavior Analysis**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **User Behavior Analysis**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.analyze-funnels.result }}" == "success" ]; then
+            echo "✅ **Funnel Analysis**: Completed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.analyze-funnels.result }}" == "skipped" ]; then
+            echo "⏭️ **Funnel Analysis**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Funnel Analysis**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.generate-insights-report.result }}" == "success" ]; then
+            echo "✅ **Insights Report**: Generated" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.generate-insights-report.result }}" == "skipped" ]; then
+            echo "⏭️ **Insights Report**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Insights Report**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📈 Key Insights" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Analysis Type**: ${{ github.event.inputs.analysis_type || 'scheduled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Analysis Period**: ${{ github.event.inputs.days || '30' }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical Issues**: ${{ needs.generate-insights-report.outputs.CRITICAL_ISSUES || '0' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Insights**: ${{ needs.generate-insights-report.outputs.INSIGHTS_COUNT || '0' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Recommendations**: ${{ needs.generate-insights-report.outputs.RECOMMENDATIONS || '0' }}" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔗 Resources" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [📊 PostHog Dashboard](https://posthog.nexus.dev)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📈 Mixpanel Dashboard](https://mixpanel.com/project/nexus)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📚 Analytics Documentation](https://docs.nexus.dev/analytics)" >> $GITHUB_STEP_SUMMARY
+          echo "- [🎯 Product Insights](https://github.com/${{ github.repository }}/issues?q=label%3Aanalytics)" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📅 Next Scheduled Runs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Daily Reports**: 8:00 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- **Weekly Insights**: Mondays at 9:00 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- **Monthly Deep Analysis**: 1st of month at 10:00 AM UTC" >> $GITHUB_STEP_SUMMARY

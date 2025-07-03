@@ -143,3 +143,15 @@ packages/sre/scripts/ @nexus-team/sre-team @nexus-team/platform-team
 
 # SLO Configuration (Critical)
 packages/sre/configs/slo-definitions.yaml @nexus-team/sre-team @nexus-team/platform-team @nexus-team/security-team
+
+# Product Analytics
+packages/analytics/ @nexus-team/product-team @nexus-team/frontend-team
+packages/analytics/src/core/ @nexus-team/product-team @nexus-team/platform-team
+packages/analytics/src/providers/ @nexus-team/product-team @nexus-team/platform-team
+packages/analytics/src/react/ @nexus-team/product-team @nexus-team/frontend-team
+packages/analytics/configs/ @nexus-team/product-team @nexus-team/platform-team
+packages/analytics/scripts/ @nexus-team/product-team @nexus-team/data-team
+.github/workflows/analytics-monitoring.yml @nexus-team/product-team @nexus-team/platform-team
+
+# Analytics Configuration (Critical)
+packages/analytics/configs/analytics-config.yaml @nexus-team/product-team @nexus-team/platform-team @nexus-team/data-team
