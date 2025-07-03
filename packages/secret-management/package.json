@@ -1,0 +1,47 @@
+{
+  "name": "@nexus/secret-management",
+  "version": "1.0.0",
+  "description": "Advanced secret management system for Nexus Workspace with HashiCorp Vault and AWS Secrets Manager",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-vault": "^0.10.2",
+    "@aws-sdk/client-secrets-manager": "^3.450.0",
+    "@aws-sdk/client-ssm": "^3.450.0",
+    "@aws-sdk/client-kms": "^3.450.0",
+    "kubernetes-client": "^10.0.0",
+    "node-cache": "^5.1.2",
+    "crypto": "^1.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "express": "^4.18.2",
+    "@types/express": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/jsonwebtoken": "^9.0.5",
+    "typescript": "^5.3.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "eslint": "^8.54.0",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0"
+  },
+  "keywords": [
+    "secret-management",
+    "vault",
+    "hashicorp-vault",
+    "aws-secrets-manager",
+    "kubernetes-secrets",
+    "security",
+    "encryption"
+  ],
+  "author": "Nexus Team",
+  "license": "MIT"
+}

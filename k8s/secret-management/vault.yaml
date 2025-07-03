@@ -1,0 +1,322 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+  labels:
+    name: vault
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: vault
+  namespace: vault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault
+data:
+  vault.hcl: |
+    ui = true
+    
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+    
+    storage "file" {
+      path = "/vault/data"
+    }
+    
+    # Enable Kubernetes auth method
+    auth "kubernetes" {
+      kubernetes_host = "https://kubernetes.default.svc.cluster.local"
+      kubernetes_ca_cert = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      token_reviewer_jwt = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    }
+    
+    # API address
+    api_addr = "http://0.0.0.0:8200"
+    cluster_addr = "http://0.0.0.0:8201"
+    
+    # Disable mlock for development
+    disable_mlock = true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-keys
+  namespace: vault
+type: Opaque
+data:
+  # These will be populated during initialization
+  # vault-root-token: <base64-encoded-root-token>
+  # vault-unseal-key: <base64-encoded-unseal-key>
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  serviceName: vault
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      serviceAccountName: vault
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.15.2
+        ports:
+        - containerPort: 8200
+          name: vault-port
+          protocol: TCP
+        - containerPort: 8201
+          name: cluster-port
+          protocol: TCP
+        env:
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
+        - name: VAULT_API_ADDR
+          value: "http://0.0.0.0:8200"
+        - name: VAULT_CLUSTER_ADDR
+          value: "http://0.0.0.0:8201"
+        - name: VAULT_LOCAL_CONFIG
+          value: |
+            ui = true
+            listener "tcp" {
+              address = "0.0.0.0:8200"
+              tls_disable = 1
+            }
+            storage "file" {
+              path = "/vault/data"
+            }
+            disable_mlock = true
+        args:
+        - "vault"
+        - "server"
+        - "-config=/vault/config/vault.hcl"
+        volumeMounts:
+        - name: vault-config
+          mountPath: /vault/config
+        - name: vault-data
+          mountPath: /vault/data
+        livenessProbe:
+          httpGet:
+            path: /v1/sys/health?standbyok=true
+            port: 8200
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /v1/sys/health?standbyok=true
+            port: 8200
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            add:
+            - IPC_LOCK
+      volumes:
+      - name: vault-config
+        configMap:
+          name: vault-config
+  volumeClaimTemplates:
+  - metadata:
+      name: vault-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  ports:
+  - port: 8200
+    targetPort: 8200
+    name: vault-port
+  - port: 8201
+    targetPort: 8201
+    name: cluster-port
+  selector:
+    app: vault
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vault
+  namespace: vault
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - vault.nexus-workspace.com
+    secretName: vault-tls
+  rules:
+  - host: vault.nexus-workspace.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vault
+            port:
+              number: 8200
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-init
+  namespace: vault
+spec:
+  template:
+    spec:
+      serviceAccountName: vault
+      restartPolicy: OnFailure
+      containers:
+      - name: vault-init
+        image: hashicorp/vault:1.15.2
+        env:
+        - name: VAULT_ADDR
+          value: "http://vault:8200"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Wait for Vault to be ready
+          until vault status; do
+            echo "Waiting for Vault to be ready..."
+            sleep 5
+          done
+          
+          # Check if Vault is already initialized
+          if vault status | grep -q "Initialized.*true"; then
+            echo "Vault is already initialized"
+            exit 0
+          fi
+          
+          # Initialize Vault
+          echo "Initializing Vault..."
+          vault operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/vault-init.json
+          
+          # Extract keys
+          UNSEAL_KEY=$(cat /tmp/vault-init.json | jq -r '.unseal_keys_b64[0]')
+          ROOT_TOKEN=$(cat /tmp/vault-init.json | jq -r '.root_token')
+          
+          # Unseal Vault
+          echo "Unsealing Vault..."
+          vault operator unseal $UNSEAL_KEY
+          
+          # Login with root token
+          vault auth $ROOT_TOKEN
+          
+          # Enable KV secrets engine
+          vault secrets enable -path=secret kv-v2
+          
+          # Enable Kubernetes auth method
+          vault auth enable kubernetes
+          
+          # Configure Kubernetes auth
+          vault write auth/kubernetes/config \
+            token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+            kubernetes_host="https://kubernetes.default.svc.cluster.local" \
+            kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
+          
+          # Create policy for Nexus Workspace
+          vault policy write nexus-workspace - <<EOF
+          path "secret/data/nexus-workspace/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+          path "secret/metadata/nexus-workspace/*" {
+            capabilities = ["list"]
+          }
+          EOF
+          
+          # Create Kubernetes role
+          vault write auth/kubernetes/role/nexus-workspace \
+            bound_service_account_names=nexus-workspace \
+            bound_service_account_namespaces=default \
+            policies=nexus-workspace \
+            ttl=24h
+          
+          # Store keys in Kubernetes secret (for backup purposes)
+          kubectl create secret generic vault-keys \
+            --from-literal=root-token=$ROOT_TOKEN \
+            --from-literal=unseal-key=$UNSEAL_KEY \
+            --namespace=vault \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          echo "Vault initialization completed successfully"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-workspace
+  namespace: default
+  labels:
+    app: nexus-workspace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nexus-workspace-vault-auth
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nexus-workspace-vault-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nexus-workspace-vault-auth
+subjects:
+- kind: ServiceAccount
+  name: nexus-workspace
+  namespace: default
