@@ -2,7 +2,7 @@ import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { JWT } from 'next-auth/jwt'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 
 interface AuthResponse {
   user: {
@@ -96,11 +96,12 @@ export const authOptions: NextAuthOptions = {
             }),
           })
 
-          const authResponse: AuthResponse = await response.json()
-
           if (!response.ok) {
-            throw new Error(authResponse.message || 'Authentication failed')
+            const errorData = await response.json()
+            throw new Error(errorData.message || 'Authentication failed')
           }
+
+          const authResponse: AuthResponse = await response.json()
 
           return {
             id: authResponse.user.id,

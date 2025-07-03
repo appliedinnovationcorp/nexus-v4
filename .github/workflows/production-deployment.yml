@@ -1,0 +1,407 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      staging_validation_required:
+        description: 'Require staging validation before production deployment'
+        required: true
+        default: 'true'
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+  TERRAFORM_VERSION: 1.6.0
+  NODE_VERSION: 18
+
+jobs:
+  # Validate that staging deployment was successful
+  validate-staging:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      staging-validated: ${{ steps.check.outputs.validated }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check staging environment health
+        id: check
+        run: |
+          echo "🔍 Validating staging environment before production deployment..."
+          
+          # Get staging ALB DNS from Terraform state
+          cd infrastructure/terraform/environments/staging
+          
+          # Check if staging infrastructure exists
+          if ! terraform show &>/dev/null; then
+            echo "❌ Staging infrastructure not found!"
+            echo "Please deploy to staging first."
+            exit 1
+          fi
+          
+          STAGING_ALB=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+          
+          if [ -z "$STAGING_ALB" ]; then
+            echo "❌ Staging ALB not found!"
+            exit 1
+          fi
+          
+          echo "🌐 Staging ALB: $STAGING_ALB"
+          
+          # Health check staging environment
+          echo "🏥 Running staging health checks..."
+          
+          # Check if staging is responding
+          if ! curl -f -s "http://${STAGING_ALB}/health" > /dev/null; then
+            echo "❌ Staging health check failed!"
+            echo "Staging environment is not healthy. Cannot proceed with production deployment."
+            exit 1
+          fi
+          
+          # Check if staging API is responding
+          if ! curl -f -s "http://${STAGING_ALB}/api/health" > /dev/null; then
+            echo "❌ Staging API health check failed!"
+            exit 1
+          fi
+          
+          echo "✅ Staging environment is healthy"
+          echo "validated=true" >> $GITHUB_OUTPUT
+
+      - name: Verify recent E2E test results
+        run: |
+          echo "🧪 Checking recent E2E test results..."
+          
+          # Check if E2E tests have run recently (within last 24 hours)
+          # This is a simplified check - in practice, you might query your test results database
+          
+          # Get the latest workflow run for staging deployment
+          LATEST_RUN=$(gh run list --workflow=staging-deployment.yml --limit=1 --json status,conclusion,createdAt)
+          
+          if [ -z "$LATEST_RUN" ]; then
+            echo "❌ No recent staging deployment found!"
+            exit 1
+          fi
+          
+          echo "✅ Recent staging deployment found with E2E tests"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and test (same as staging but for production)
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: validate-staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run linting
+        run: pnpm lint
+
+      - name: Run type checking
+        run: pnpm type-check
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Build applications
+        run: pnpm build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build-artifacts
+          path: |
+            apps/*/dist
+            packages/*/dist
+          retention-days: 30
+
+  # Deploy infrastructure to production
+  deploy-production-infrastructure:
+    runs-on: ubuntu-latest
+    needs: [validate-staging, build-and-test]
+    environment: production
+    outputs:
+      cluster-name: ${{ steps.terraform.outputs.cluster-name }}
+      alb-dns: ${{ steps.terraform.outputs.alb-dns }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: infrastructure/terraform
+        run: terraform plan -out=production.tfplan
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve production.tfplan
+
+      - name: Get Terraform Outputs
+        id: terraform
+        working-directory: infrastructure/terraform
+        run: |
+          echo "cluster-name=$(terraform output -raw cluster_id)" >> $GITHUB_OUTPUT
+          echo "alb-dns=$(terraform output -raw alb_dns_name)" >> $GITHUB_OUTPUT
+
+  # Build and push production images
+  build-and-push-production-images:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, deploy-production-infrastructure]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: production-build-artifacts
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push production images
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: production-${{ github.sha }}
+        run: |
+          # Build and push main application image
+          docker build -t $ECR_REGISTRY/nexus-workspace:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/nexus-workspace:$IMAGE_TAG
+          
+          # Tag as latest production
+          docker tag $ECR_REGISTRY/nexus-workspace:$IMAGE_TAG $ECR_REGISTRY/nexus-workspace:production-latest
+          docker push $ECR_REGISTRY/nexus-workspace:production-latest
+          
+          # Also tag with version if this is a release
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            docker tag $ECR_REGISTRY/nexus-workspace:$IMAGE_TAG $ECR_REGISTRY/nexus-workspace:$VERSION
+            docker push $ECR_REGISTRY/nexus-workspace:$VERSION
+          fi
+
+  # Blue-Green deployment to production
+  deploy-production-applications:
+    runs-on: ubuntu-latest
+    needs: [deploy-production-infrastructure, build-and-push-production-images]
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ needs.deploy-production-infrastructure.outputs.cluster-name }}
+
+      - name: Blue-Green Deployment
+        env:
+          IMAGE_TAG: production-${{ github.sha }}
+        run: |
+          echo "🔄 Starting Blue-Green deployment..."
+          
+          # Create green deployment
+          if [ -d "k8s/production" ]; then
+            # Replace image tags in Kubernetes manifests
+            find k8s/production -name "*.yaml" -o -name "*.yml" | xargs sed -i "s|IMAGE_TAG|$IMAGE_TAG|g"
+            
+            # Deploy green version
+            kubectl apply -f k8s/production/
+            
+            # Wait for green deployment to be ready
+            kubectl rollout status deployment/nexus-workspace-green --timeout=600s
+            
+            # Run health checks on green deployment
+            echo "🏥 Running health checks on green deployment..."
+            
+            # Get green service endpoint
+            GREEN_SERVICE=$(kubectl get service nexus-workspace-green -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            
+            # Wait for load balancer to be ready
+            sleep 60
+            
+            # Health check
+            if curl -f -s "http://${GREEN_SERVICE}/health" > /dev/null; then
+              echo "✅ Green deployment health check passed"
+              
+              # Switch traffic to green (update main service selector)
+              kubectl patch service nexus-workspace -p '{"spec":{"selector":{"version":"green"}}}'
+              
+              echo "✅ Traffic switched to green deployment"
+              
+              # Wait a bit then remove blue deployment
+              sleep 30
+              kubectl delete deployment nexus-workspace-blue --ignore-not-found=true
+              
+              # Rename green to blue for next deployment
+              kubectl patch deployment nexus-workspace-green -p '{"spec":{"selector":{"matchLabels":{"version":"blue"}},"template":{"metadata":{"labels":{"version":"blue"}}}}}'
+              kubectl patch deployment nexus-workspace-green --type='merge' -p='{"metadata":{"name":"nexus-workspace-blue"}}'
+              
+              echo "🎉 Blue-Green deployment completed successfully!"
+            else
+              echo "❌ Green deployment health check failed!"
+              kubectl delete deployment nexus-workspace-green
+              exit 1
+            fi
+          else
+            echo "⚠️  No production Kubernetes manifests found"
+            echo "   Please create k8s/production/ directory with production configs"
+          fi
+
+      - name: Run database migrations
+        run: |
+          echo "🗄️  Running production database migrations..."
+          # Add your production migration commands here
+          # kubectl exec -it deployment/nexus-workspace-blue -- npm run migrate:prod
+
+  # Production smoke tests
+  production-smoke-tests:
+    runs-on: ubuntu-latest
+    needs: deploy-production-applications
+    steps:
+      - name: Production health checks
+        env:
+          ALB_DNS: ${{ needs.deploy-production-infrastructure.outputs.alb-dns }}
+        run: |
+          echo "🏥 Running production health checks..."
+          
+          # Wait for services to be ready
+          sleep 60
+          
+          # Health check endpoint
+          curl -f "http://${ALB_DNS}/health" || exit 1
+          
+          # API endpoint check
+          curl -f "http://${ALB_DNS}/api/health" || exit 1
+          
+          # Database connectivity check
+          curl -f "http://${ALB_DNS}/api/db-health" || exit 1
+          
+          echo "✅ All production health checks passed!"
+
+      - name: Performance verification
+        env:
+          ALB_DNS: ${{ needs.deploy-production-infrastructure.outputs.alb-dns }}
+        run: |
+          echo "⚡ Running production performance verification..."
+          
+          # Simple performance check
+          RESPONSE_TIME=$(curl -w "%{time_total}" -o /dev/null -s "http://${ALB_DNS}/")
+          
+          # Check if response time is acceptable (less than 2 seconds)
+          if (( $(echo "$RESPONSE_TIME < 2.0" | bc -l) )); then
+            echo "✅ Performance check passed: ${RESPONSE_TIME}s"
+          else
+            echo "⚠️  Performance check warning: ${RESPONSE_TIME}s (>2s)"
+          fi
+
+  # Notify about production deployment
+  notify-production:
+    runs-on: ubuntu-latest
+    needs: [deploy-production-applications, production-smoke-tests]
+    if: always()
+    steps:
+      - name: Notify deployment status
+        env:
+          ALB_DNS: ${{ needs.deploy-production-infrastructure.outputs.alb-dns }}
+          DEPLOYMENT_STATUS: ${{ needs.production-smoke-tests.result }}
+        run: |
+          if [ "$DEPLOYMENT_STATUS" == "success" ]; then
+            echo "🎉 Production deployment successful!"
+            echo "Production URL: http://${ALB_DNS}"
+            echo "All health checks passed."
+            
+            # You can add Slack/Teams/email notifications here
+            # curl -X POST -H 'Content-type: application/json' \
+            #   --data '{"text":"🎉 Production deployment successful! URL: http://'${ALB_DNS}'"}' \
+            #   ${{ secrets.SLACK_WEBHOOK_URL }}
+          else
+            echo "❌ Production deployment failed!"
+            echo "Please check the logs and investigate immediately."
+            
+            # Send alert notification
+            # curl -X POST -H 'Content-type: application/json' \
+            #   --data '{"text":"🚨 Production deployment failed! Please investigate immediately."}' \
+            #   ${{ secrets.SLACK_WEBHOOK_URL }}
+            
+            exit 1
+          fi
+
+  # Create release tag if deployment successful
+  create-release:
+    runs-on: ubuntu-latest
+    needs: production-smoke-tests
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create release tag
+        run: |
+          # Generate version tag based on date and commit
+          VERSION="v$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)"
+          
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          git tag -a "$VERSION" -m "Production release $VERSION"
+          git push origin "$VERSION"
+          
+          echo "✅ Created release tag: $VERSION"

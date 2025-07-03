@@ -1,0 +1,43 @@
+# Nexus Workspace - Staging Environment Configuration
+# Copy this file to terraform.tfvars and fill in the values
+
+# AWS Region
+aws_region = "us-west-2"
+
+# Network Configuration
+vpc_cidr           = "10.20.0.0/16"
+availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
+private_subnets    = ["10.20.1.0/24", "10.20.2.0/24", "10.20.3.0/24"]
+public_subnets     = ["10.20.101.0/24", "10.20.102.0/24", "10.20.103.0/24"]
+database_subnets   = ["10.20.201.0/24", "10.20.202.0/24", "10.20.203.0/24"]
+single_nat_gateway = true
+
+# EKS Configuration
+eks_cluster_version = "1.28"
+
+# IAM Configuration
+eks_map_roles = [
+  {
+    rolearn  = "arn:aws:iam::123456789012:role/DevOpsRole"
+    username = "devops"
+    groups   = ["system:masters"]
+  }
+]
+
+eks_map_users = [
+  {
+    userarn  = "arn:aws:iam::123456789012:user/admin"
+    username = "admin"
+    groups   = ["system:masters"]
+  }
+]
+
+# Domain Configuration
+domain_name      = "nexus-workspace.com"
+route53_zone_id  = "Z1234567890ABCDEFGHIJK"
+
+# Alert Configuration
+alert_email = "alerts@nexus-workspace.com"
+
+# Grafana Configuration
+grafana_admin_password = "change-me-in-production"
