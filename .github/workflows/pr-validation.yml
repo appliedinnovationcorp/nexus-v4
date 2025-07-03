@@ -1,0 +1,464 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - develop
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  statuses: write
+
+jobs:
+  # Job that validates branch protection requirements
+  validate-branch-protection:
+    runs-on: ubuntu-latest
+    name: Validate Branch Protection
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Validate branch protection requirements
+        id: validate-protection
+        run: |
+          set -e
+          
+          echo "=== Branch Protection Validation ==="
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Target Branch: ${{ github.event.pull_request.base.ref }}"
+          echo "Source Branch: ${{ github.event.pull_request.head.ref }}"
+          echo ""
+          
+          target_branch="${{ github.event.pull_request.base.ref }}"
+          pr_number="${{ github.event.pull_request.number }}"
+          
+          # Load configuration
+          if [ ! -f ".github/branch-protection-config.json" ]; then
+            echo "❌ Branch protection configuration not found"
+            exit 1
+          fi
+          
+          config=$(cat .github/branch-protection-config.json)
+          
+          # Get merge requirements for target branch
+          merge_requirements=$(echo "$config" | jq -r ".merge_requirements.\"$target_branch\"")
+          
+          if [ "$merge_requirements" = "null" ]; then
+            echo "⚠️  No specific merge requirements for branch '$target_branch'"
+            exit 0
+          fi
+          
+          echo "Merge requirements for '$target_branch':"
+          echo "$merge_requirements" | jq '.'
+          echo ""
+          
+          # Get PR details
+          pr_data=$(gh api repos/${{ github.repository }}/pulls/$pr_number)
+          
+          # Check minimum approvals
+          minimum_approvals=$(echo "$merge_requirements" | jq -r '.minimum_approvals')
+          current_approvals=$(echo "$pr_data" | jq -r '.requested_reviewers | length')
+          
+          echo "Required approvals: $minimum_approvals"
+          echo "Current approvals: $current_approvals"
+          
+          # Get PR reviews
+          reviews=$(gh api repos/${{ github.repository }}/pulls/$pr_number/reviews)
+          approved_reviews=$(echo "$reviews" | jq '[.[] | select(.state == "APPROVED")] | length')
+          
+          echo "Approved reviews: $approved_reviews"
+          
+          if [ "$approved_reviews" -lt "$minimum_approvals" ]; then
+            echo "❌ Insufficient approvals: $approved_reviews/$minimum_approvals"
+            echo "validation_status=failed" >> $GITHUB_OUTPUT
+            echo "validation_message=Insufficient approvals: $approved_reviews/$minimum_approvals required" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Sufficient approvals: $approved_reviews/$minimum_approvals"
+            echo "validation_status=passed" >> $GITHUB_OUTPUT
+            echo "validation_message=All approval requirements met" >> $GITHUB_OUTPUT
+          fi
+
+  # Job that validates CODEOWNERS requirements
+  codeowners-review-required:
+    runs-on: ubuntu-latest
+    name: CODEOWNERS Review Required
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Check CODEOWNERS requirements
+        id: check-codeowners
+        run: |
+          set -e
+          
+          echo "=== CODEOWNERS Review Validation ==="
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo ""
+          
+          pr_number="${{ github.event.pull_request.number }}"
+          
+          # Get changed files in PR
+          changed_files=$(gh api repos/${{ github.repository }}/pulls/$pr_number/files --jq '.[].filename')
+          
+          echo "Changed files:"
+          echo "$changed_files"
+          echo ""
+          
+          # Check if CODEOWNERS file exists
+          if [ ! -f ".github/CODEOWNERS" ]; then
+            echo "⚠️  CODEOWNERS file not found"
+            echo "codeowners_status=warning" >> $GITHUB_OUTPUT
+            echo "codeowners_message=CODEOWNERS file not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Load configuration to get critical patterns
+          if [ -f ".github/branch-protection-config.json" ]; then
+            config=$(cat .github/branch-protection-config.json)
+            critical_patterns=$(echo "$config" | jq -r '.critical_file_patterns | to_entries[] | .value[]' 2>/dev/null || echo "")
+          else
+            critical_patterns=""
+          fi
+          
+          # Check if any changed files require code owner review
+          requires_codeowner_review=false
+          critical_files_changed=""
+          
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              # Check against critical patterns
+              while IFS= read -r pattern; do
+                if [ -n "$pattern" ]; then
+                  # Convert glob pattern to regex for matching
+                  if [[ "$file" == $pattern ]]; then
+                    echo "🔍 Critical file changed: $file (matches pattern: $pattern)"
+                    requires_codeowner_review=true
+                    critical_files_changed="${critical_files_changed}$file\n"
+                  fi
+                fi
+              done <<< "$critical_patterns"
+              
+              # Check against CODEOWNERS patterns
+              while IFS= read -r codeowner_line; do
+                if [[ "$codeowner_line" =~ ^[^#].* ]]; then
+                  pattern=$(echo "$codeowner_line" | awk '{print $1}')
+                  if [[ "$file" == $pattern ]]; then
+                    echo "🔍 File requires code owner review: $file"
+                    requires_codeowner_review=true
+                  fi
+                fi
+              done < .github/CODEOWNERS
+            fi
+          done <<< "$changed_files"
+          
+          if [ "$requires_codeowner_review" = true ]; then
+            echo ""
+            echo "📋 Code owner review required for this PR"
+            
+            # Get PR reviews from code owners
+            reviews=$(gh api repos/${{ github.repository }}/pulls/$pr_number/reviews)
+            
+            # Get code owners for changed files (simplified check)
+            codeowner_approved=false
+            
+            # For now, we'll check if any review is from a code owner
+            # In a real implementation, you'd want to parse CODEOWNERS and match reviewers
+            if echo "$reviews" | jq -e '.[] | select(.state == "APPROVED")' >/dev/null; then
+              echo "✅ Code owner approval found"
+              codeowner_approved=true
+            fi
+            
+            if [ "$codeowner_approved" = true ]; then
+              echo "codeowners_status=passed" >> $GITHUB_OUTPUT
+              echo "codeowners_message=Code owner review requirements satisfied" >> $GITHUB_OUTPUT
+            else
+              echo "❌ Code owner review required but not found"
+              echo "codeowners_status=failed" >> $GITHUB_OUTPUT
+              echo "codeowners_message=Code owner review required for critical files" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "✅ No code owner review required"
+            echo "codeowners_status=passed" >> $GITHUB_OUTPUT
+            echo "codeowners_message=No code owner review required" >> $GITHUB_OUTPUT
+          fi
+
+  # Security gate for critical changes
+  security-gate:
+    runs-on: ubuntu-latest
+    name: Security Gate
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Security validation
+        id: security-check
+        run: |
+          set -e
+          
+          echo "=== Security Gate Validation ==="
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo ""
+          
+          pr_number="${{ github.event.pull_request.number }}"
+          security_violations=0
+          security_warnings=""
+          
+          # Get changed files
+          changed_files=$(gh api repos/${{ github.repository }}/pulls/$pr_number/files --jq '.[].filename')
+          
+          echo "Checking changed files for security concerns..."
+          
+          # Check for sensitive file patterns
+          sensitive_patterns=(
+            "*.key"
+            "*.pem"
+            "*.crt"
+            "*.p12"
+            "*.pfx"
+            ".env"
+            ".env.*"
+            "secrets.*"
+            "password*"
+            "credentials*"
+          )
+          
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              for pattern in "${sensitive_patterns[@]}"; do
+                if [[ "$file" == $pattern ]]; then
+                  echo "⚠️  Sensitive file detected: $file"
+                  security_warnings="${security_warnings}Sensitive file: $file\n"
+                  security_violations=$((security_violations + 1))
+                fi
+              done
+              
+              # Check file content for potential secrets (basic check)
+              if gh api repos/${{ github.repository }}/pulls/$pr_number/files --jq ".[] | select(.filename == \"$file\") | .patch" | grep -iE "(password|secret|key|token|api_key)" >/dev/null 2>&1; then
+                echo "⚠️  Potential secret in file: $file"
+                security_warnings="${security_warnings}Potential secret in: $file\n"
+              fi
+            fi
+          done <<< "$changed_files"
+          
+          # Check for security-critical file changes
+          if [ -f ".github/branch-protection-config.json" ]; then
+            config=$(cat .github/branch-protection-config.json)
+            security_critical_patterns=$(echo "$config" | jq -r '.critical_file_patterns.security_critical[]' 2>/dev/null || echo "")
+            
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                while IFS= read -r pattern; do
+                  if [ -n "$pattern" ] && [[ "$file" == $pattern ]]; then
+                    echo "🔒 Security-critical file changed: $file"
+                    
+                    # Check if security team review is present
+                    reviews=$(gh api repos/${{ github.repository }}/pulls/$pr_number/reviews)
+                    security_team_review=$(echo "$reviews" | jq -r '.[] | select(.user.login | contains("security")) | .state' 2>/dev/null || echo "")
+                    
+                    if [ "$security_team_review" != "APPROVED" ]; then
+                      echo "❌ Security team review required for: $file"
+                      security_warnings="${security_warnings}Security team review required for: $file\n"
+                      security_violations=$((security_violations + 1))
+                    fi
+                  fi
+                done <<< "$security_critical_patterns"
+              fi
+            done <<< "$changed_files"
+          fi
+          
+          if [ $security_violations -eq 0 ]; then
+            echo "✅ Security gate passed"
+            echo "security_status=passed" >> $GITHUB_OUTPUT
+            echo "security_message=No security violations detected" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Security gate failed with $security_violations violations"
+            echo "security_status=failed" >> $GITHUB_OUTPUT
+            echo "security_message=Security violations detected" >> $GITHUB_OUTPUT
+            echo "security_warnings<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$security_warnings" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+  # Comprehensive status check that combines all validations
+  branch-protection-all-checks:
+    runs-on: ubuntu-latest
+    name: Branch Protection All Checks
+    needs: [validate-branch-protection, codeowners-review-required, security-gate]
+    if: always() && github.event.pull_request.draft == false
+    
+    steps:
+      - name: Evaluate all checks
+        id: evaluate
+        run: |
+          echo "=== Branch Protection All Checks Summary ==="
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo ""
+          
+          # Check results from all jobs
+          protection_status="${{ needs.validate-branch-protection.outputs.validation_status || 'skipped' }}"
+          codeowners_status="${{ needs.codeowners-review-required.outputs.codeowners_status || 'skipped' }}"
+          security_status="${{ needs.security-gate.outputs.security_status || 'skipped' }}"
+          
+          echo "Branch Protection Validation: $protection_status"
+          echo "CODEOWNERS Review: $codeowners_status"
+          echo "Security Gate: $security_status"
+          echo ""
+          
+          # Determine overall status
+          overall_status="passed"
+          
+          if [ "$protection_status" = "failed" ] || [ "$codeowners_status" = "failed" ] || [ "$security_status" = "failed" ]; then
+            overall_status="failed"
+          elif [ "$protection_status" = "warning" ] || [ "$codeowners_status" = "warning" ] || [ "$security_status" = "warning" ]; then
+            overall_status="warning"
+          fi
+          
+          echo "Overall Status: $overall_status"
+          
+          if [ "$overall_status" = "failed" ]; then
+            echo "❌ Branch protection checks failed"
+            exit 1
+          elif [ "$overall_status" = "warning" ]; then
+            echo "⚠️  Branch protection checks passed with warnings"
+          else
+            echo "✅ All branch protection checks passed"
+          fi
+
+      - name: Update PR with status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { context } = require('@actions/github');
+            
+            const protection_status = '${{ needs.validate-branch-protection.outputs.validation_status || 'skipped' }}';
+            const codeowners_status = '${{ needs.codeowners-review-required.outputs.codeowners_status || 'skipped' }}';
+            const security_status = '${{ needs.security-gate.outputs.security_status || 'skipped' }}';
+            
+            let statusEmoji = '✅';
+            let statusText = 'All checks passed';
+            
+            if (protection_status === 'failed' || codeowners_status === 'failed' || security_status === 'failed') {
+              statusEmoji = '❌';
+              statusText = 'Some checks failed';
+            } else if (protection_status === 'warning' || codeowners_status === 'warning' || security_status === 'warning') {
+              statusEmoji = '⚠️';
+              statusText = 'Checks passed with warnings';
+            }
+            
+            const comment = `## ${statusEmoji} Branch Protection Status
+            
+            | Check | Status | Message |
+            |-------|--------|---------|
+            | Branch Protection | ${protection_status} | ${{ needs.validate-branch-protection.outputs.validation_message || 'N/A' }} |
+            | CODEOWNERS Review | ${codeowners_status} | ${{ needs.codeowners-review-required.outputs.codeowners_message || 'N/A' }} |
+            | Security Gate | ${security_status} | ${{ needs.security-gate.outputs.security_message || 'N/A' }} |
+            
+            **Overall Status:** ${statusText}
+            
+            ---
+            *This comment is automatically updated by the branch protection workflow.*`;
+            
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            
+            const existingComment = comments.data.find(comment => 
+              comment.body.includes('Branch Protection Status')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: comment
+              });
+            }

@@ -1,0 +1,235 @@
+{
+  "branch_protection_rules": {
+    "main": {
+      "required_status_checks": {
+        "strict": true,
+        "contexts": [
+          "branch-protection/all-checks",
+          "codeowners/review-required",
+          "security-gate",
+          "validate-branch-protection",
+          "code-quality",
+          "unit-tests",
+          "integration-tests",
+          "e2e-tests",
+          "security-checks"
+        ]
+      },
+      "enforce_admins": true,
+      "required_pull_request_reviews": {
+        "required_approving_review_count": 2,
+        "dismiss_stale_reviews": true,
+        "require_code_owner_reviews": true,
+        "require_last_push_approval": true,
+        "bypass_pull_request_allowances": {
+          "users": [],
+          "teams": ["nexus-team/platform-leads"],
+          "apps": []
+        }
+      },
+      "restrictions": {
+        "users": [],
+        "teams": [
+          "nexus-team/platform-team",
+          "nexus-team/security-team",
+          "nexus-team/devops-team"
+        ],
+        "apps": []
+      },
+      "required_linear_history": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "block_creations": false,
+      "required_conversation_resolution": true,
+      "lock_branch": false,
+      "allow_fork_syncing": true
+    },
+    "develop": {
+      "required_status_checks": {
+        "strict": true,
+        "contexts": [
+          "code-quality",
+          "unit-tests",
+          "integration-tests",
+          "security-checks"
+        ]
+      },
+      "enforce_admins": false,
+      "required_pull_request_reviews": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews": true,
+        "require_code_owner_reviews": true,
+        "require_last_push_approval": false
+      },
+      "restrictions": null,
+      "required_linear_history": false,
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "block_creations": false,
+      "required_conversation_resolution": true,
+      "lock_branch": false,
+      "allow_fork_syncing": true
+    }
+  },
+  "team_permissions": {
+    "nexus-team/platform-team": {
+      "permission": "admin",
+      "can_bypass_branch_protection": true,
+      "can_force_push": false
+    },
+    "nexus-team/security-team": {
+      "permission": "maintain",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    },
+    "nexus-team/devops-team": {
+      "permission": "maintain",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    },
+    "nexus-team/backend-team": {
+      "permission": "push",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    },
+    "nexus-team/frontend-team": {
+      "permission": "push",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    },
+    "nexus-team/qa-team": {
+      "permission": "push",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    },
+    "nexus-team/developers": {
+      "permission": "push",
+      "can_bypass_branch_protection": false,
+      "can_force_push": false
+    }
+  },
+  "required_checks_configuration": {
+    "branch-protection/all-checks": {
+      "description": "Comprehensive branch protection validation",
+      "required": true,
+      "timeout_minutes": 45
+    },
+    "codeowners/review-required": {
+      "description": "Code owner review validation",
+      "required": true,
+      "timeout_minutes": 5
+    },
+    "security-gate": {
+      "description": "Security scanning and validation",
+      "required": true,
+      "timeout_minutes": 30
+    },
+    "e2e-tests": {
+      "description": "End-to-end testing validation",
+      "required": true,
+      "timeout_minutes": 30
+    },
+    "code-quality": {
+      "description": "Code quality checks (linting, formatting, type checking)",
+      "required": true,
+      "timeout_minutes": 10
+    },
+    "unit-tests": {
+      "description": "Unit test execution with coverage requirements",
+      "required": true,
+      "timeout_minutes": 15
+    },
+    "integration-tests": {
+      "description": "Integration test execution",
+      "required": true,
+      "timeout_minutes": 20
+    }
+  },
+  "merge_requirements": {
+    "main": {
+      "minimum_approvals": 2,
+      "require_code_owner_approval": true,
+      "require_security_team_approval_for_critical_changes": true,
+      "require_platform_team_approval_for_infrastructure_changes": true,
+      "require_fresh_approvals_after_changes": true,
+      "require_conversation_resolution": true,
+      "require_all_checks_to_pass": true,
+      "allow_merge_commit": false,
+      "allow_squash_merge": true,
+      "allow_rebase_merge": true,
+      "delete_head_branch_on_merge": true
+    },
+    "develop": {
+      "minimum_approvals": 1,
+      "require_code_owner_approval": true,
+      "require_security_team_approval_for_critical_changes": false,
+      "require_platform_team_approval_for_infrastructure_changes": false,
+      "require_fresh_approvals_after_changes": false,
+      "require_conversation_resolution": true,
+      "require_all_checks_to_pass": true,
+      "allow_merge_commit": true,
+      "allow_squash_merge": true,
+      "allow_rebase_merge": true,
+      "delete_head_branch_on_merge": false
+    }
+  },
+  "critical_file_patterns": {
+    "security_critical": [
+      ".github/workflows/security-*.yml",
+      ".github/workflows/secret-*.yml",
+      "packages/secret-management/**",
+      "services/backend/src/auth/**",
+      "services/backend/src/secret-management/**",
+      ".env*",
+      "*.key",
+      "*.pem",
+      "*.crt"
+    ],
+    "infrastructure_critical": [
+      "infrastructure/**",
+      "k8s/**",
+      "scripts/deploy-*.sh",
+      "Dockerfile",
+      "docker-compose*.yml",
+      ".github/workflows/production-*.yml"
+    ],
+    "configuration_critical": [
+      "package.json",
+      "pnpm-workspace.yaml",
+      "turbo.json",
+      "tsconfig*.json",
+      ".github/CODEOWNERS",
+      ".github/branch-protection-config.json"
+    ]
+  },
+  "review_assignment_rules": {
+    "security_critical": {
+      "required_teams": ["nexus-team/security-team", "nexus-team/platform-team"],
+      "minimum_reviews": 2,
+      "require_all_teams": true
+    },
+    "infrastructure_critical": {
+      "required_teams": ["nexus-team/platform-team", "nexus-team/devops-team"],
+      "minimum_reviews": 2,
+      "require_all_teams": false
+    },
+    "backend_changes": {
+      "required_teams": ["nexus-team/backend-team"],
+      "minimum_reviews": 1,
+      "require_all_teams": false
+    },
+    "frontend_changes": {
+      "required_teams": ["nexus-team/frontend-team"],
+      "minimum_reviews": 1,
+      "require_all_teams": false
+    }
+  },
+  "automation_settings": {
+    "auto_assign_reviewers": true,
+    "auto_request_reviews_on_critical_changes": true,
+    "auto_dismiss_stale_reviews": true,
+    "auto_merge_dependabot_prs": false,
+    "require_up_to_date_branches": true,
+    "delete_merged_branches": true
+  }
+}

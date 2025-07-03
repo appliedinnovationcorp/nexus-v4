@@ -1,0 +1,315 @@
+name: Setup Branch Protection Rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (preview changes only)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      target_branch:
+        description: 'Target branch to configure (leave empty for all)'
+        required: false
+        default: ''
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/branch-protection-config.json'
+      - '.github/workflows/branch-protection-setup.yml'
+
+permissions:
+  contents: read
+  administration: write
+  pull-requests: write
+
+jobs:
+  setup-branch-protection:
+    runs-on: ubuntu-latest
+    name: Configure Branch Protection Rules
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Validate configuration file
+        run: |
+          if [ ! -f ".github/branch-protection-config.json" ]; then
+            echo "❌ Branch protection configuration file not found"
+            exit 1
+          fi
+          
+          # Validate JSON syntax
+          if ! jq empty .github/branch-protection-config.json; then
+            echo "❌ Invalid JSON in branch protection configuration"
+            exit 1
+          fi
+          
+          echo "✅ Configuration file is valid"
+
+      - name: Get current branch protection status
+        id: current-status
+        run: |
+          echo "=== Current Branch Protection Status ==="
+          
+          # Get all branches
+          branches=$(gh api repos/${{ github.repository }}/branches --jq '.[].name')
+          
+          for branch in $branches; do
+            echo "Branch: $branch"
+            if gh api repos/${{ github.repository }}/branches/$branch/protection 2>/dev/null; then
+              echo "  ✅ Protected"
+            else
+              echo "  ❌ Not protected"
+            fi
+            echo ""
+          done
+
+      - name: Setup branch protection rules
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          
+          echo "=== Branch Protection Setup ==="
+          echo "Dry run mode: $DRY_RUN"
+          echo "Target branch: ${TARGET_BRANCH:-'all configured branches'}"
+          echo ""
+          
+          # Read configuration
+          config=$(cat .github/branch-protection-config.json)
+          
+          # Get branches to configure
+          if [ -n "$TARGET_BRANCH" ]; then
+            branches="$TARGET_BRANCH"
+          else
+            branches=$(echo "$config" | jq -r '.branch_protection_rules | keys[]')
+          fi
+          
+          for branch in $branches; do
+            echo "=== Configuring branch: $branch ==="
+            
+            # Get branch configuration
+            branch_config=$(echo "$config" | jq -r ".branch_protection_rules.\"$branch\"")
+            
+            if [ "$branch_config" = "null" ]; then
+              echo "❌ No configuration found for branch: $branch"
+              continue
+            fi
+            
+            # Check if branch exists
+            if ! gh api repos/${{ github.repository }}/branches/$branch >/dev/null 2>&1; then
+              echo "⚠️  Branch '$branch' does not exist, skipping..."
+              continue
+            fi
+            
+            # Build protection rule
+            protection_rule=$(echo "$branch_config" | jq '{
+              required_status_checks: .required_status_checks,
+              enforce_admins: .enforce_admins,
+              required_pull_request_reviews: .required_pull_request_reviews,
+              restrictions: .restrictions,
+              required_linear_history: .required_linear_history,
+              allow_force_pushes: .allow_force_pushes,
+              allow_deletions: .allow_deletions,
+              block_creations: .block_creations,
+              required_conversation_resolution: .required_conversation_resolution,
+              lock_branch: .lock_branch,
+              allow_fork_syncing: .allow_fork_syncing
+            }')
+            
+            echo "Protection rule for $branch:"
+            echo "$protection_rule" | jq '.'
+            echo ""
+            
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "🔍 DRY RUN: Would apply protection rule to branch '$branch'"
+            else
+              echo "🔧 Applying protection rule to branch '$branch'..."
+              
+              # Apply branch protection
+              if echo "$protection_rule" | gh api \
+                --method PUT \
+                repos/${{ github.repository }}/branches/$branch/protection \
+                --input -; then
+                echo "✅ Successfully configured protection for branch '$branch'"
+              else
+                echo "❌ Failed to configure protection for branch '$branch'"
+                exit 1
+              fi
+            fi
+            
+            echo ""
+          done
+
+      - name: Setup team permissions
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Team Permissions Setup ==="
+          
+          config=$(cat .github/branch-protection-config.json)
+          team_permissions=$(echo "$config" | jq -r '.team_permissions')
+          
+          if [ "$team_permissions" = "null" ]; then
+            echo "No team permissions configured"
+            exit 0
+          fi
+          
+          echo "$team_permissions" | jq -r 'to_entries[]' | while IFS= read -r team_entry; do
+            team_name=$(echo "$team_entry" | jq -r '.key')
+            team_config=$(echo "$team_entry" | jq -r '.value')
+            permission=$(echo "$team_config" | jq -r '.permission')
+            
+            echo "Team: $team_name"
+            echo "Permission: $permission"
+            
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "🔍 DRY RUN: Would set permission '$permission' for team '$team_name'"
+            else
+              echo "🔧 Setting permission '$permission' for team '$team_name'..."
+              
+              # Note: This requires organization admin permissions
+              # gh api --method PUT repos/${{ github.repository }}/teams/$team_name \
+              #   --field permission="$permission" || echo "⚠️  Could not set team permission (may require org admin)"
+              
+              echo "⚠️  Team permission setup requires organization admin privileges"
+            fi
+            
+            echo ""
+          done
+
+      - name: Verify branch protection
+        run: |
+          echo "=== Verification ==="
+          
+          config=$(cat .github/branch-protection-config.json)
+          branches=$(echo "$config" | jq -r '.branch_protection_rules | keys[]')
+          
+          for branch in $branches; do
+            echo "Verifying branch: $branch"
+            
+            if gh api repos/${{ github.repository }}/branches/$branch/protection >/dev/null 2>&1; then
+              echo "✅ Branch '$branch' is protected"
+              
+              # Get protection details
+              protection=$(gh api repos/${{ github.repository }}/branches/$branch/protection)
+              
+              # Check required status checks
+              if echo "$protection" | jq -e '.required_status_checks' >/dev/null; then
+                contexts=$(echo "$protection" | jq -r '.required_status_checks.contexts[]?' | wc -l)
+                echo "  📋 Required status checks: $contexts contexts"
+              fi
+              
+              # Check required reviews
+              if echo "$protection" | jq -e '.required_pull_request_reviews' >/dev/null; then
+                required_reviews=$(echo "$protection" | jq -r '.required_pull_request_reviews.required_approving_review_count')
+                echo "  👥 Required reviews: $required_reviews"
+              fi
+              
+              # Check admin enforcement
+              enforce_admins=$(echo "$protection" | jq -r '.enforce_admins.enabled')
+              echo "  🔒 Enforce for admins: $enforce_admins"
+              
+            else
+              echo "❌ Branch '$branch' is not protected"
+            fi
+            
+            echo ""
+          done
+
+      - name: Generate summary report
+        run: |
+          echo "=== Branch Protection Summary ==="
+          echo ""
+          
+          {
+            echo "# Branch Protection Configuration Report"
+            echo ""
+            echo "**Repository:** ${{ github.repository }}"
+            echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "**Dry Run:** ${{ github.event.inputs.dry_run || 'true' }}"
+            echo ""
+            
+            config=$(cat .github/branch-protection-config.json)
+            branches=$(echo "$config" | jq -r '.branch_protection_rules | keys[]')
+            
+            echo "## Protected Branches"
+            echo ""
+            
+            for branch in $branches; do
+              echo "### Branch: \`$branch\`"
+              echo ""
+              
+              if gh api repos/${{ github.repository }}/branches/$branch/protection >/dev/null 2>&1; then
+                protection=$(gh api repos/${{ github.repository }}/branches/$branch/protection)
+                
+                echo "- **Status:** ✅ Protected"
+                
+                if echo "$protection" | jq -e '.required_status_checks' >/dev/null; then
+                  contexts=$(echo "$protection" | jq -r '.required_status_checks.contexts[]?' | tr '\n' ', ' | sed 's/,$//')
+                  echo "- **Required Checks:** $contexts"
+                fi
+                
+                if echo "$protection" | jq -e '.required_pull_request_reviews' >/dev/null; then
+                  required_reviews=$(echo "$protection" | jq -r '.required_pull_request_reviews.required_approving_review_count')
+                  code_owner_reviews=$(echo "$protection" | jq -r '.required_pull_request_reviews.require_code_owner_reviews')
+                  echo "- **Required Reviews:** $required_reviews (Code owner reviews: $code_owner_reviews)"
+                fi
+                
+                enforce_admins=$(echo "$protection" | jq -r '.enforce_admins.enabled')
+                echo "- **Enforce for Admins:** $enforce_admins"
+                
+              else
+                echo "- **Status:** ❌ Not Protected"
+              fi
+              
+              echo ""
+            done
+            
+            echo "## Configuration Files"
+            echo ""
+            echo "- Branch Protection Config: \`.github/branch-protection-config.json\`"
+            echo "- CODEOWNERS: \`.github/CODEOWNERS\`"
+            echo "- Setup Workflow: \`.github/workflows/branch-protection-setup.yml\`"
+            
+          } > branch-protection-report.md
+          
+          cat branch-protection-report.md
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-protection-report
+          path: branch-protection-report.md
+          retention-days: 30

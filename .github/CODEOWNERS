@@ -1,0 +1,119 @@
+# Code Owners for Nexus Workspace
+# This file defines who must review changes to specific parts of the codebase
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback - requires review from at least one team member
+* @nexus-team/developers
+
+# Critical Infrastructure & Security
+/.github/ @nexus-team/platform-team @nexus-team/security-team
+/infrastructure/ @nexus-team/platform-team @nexus-team/devops-team
+/k8s/ @nexus-team/platform-team @nexus-team/devops-team
+/scripts/ @nexus-team/platform-team @nexus-team/devops-team
+
+# Security-sensitive files
+/packages/secret-management/ @nexus-team/security-team @nexus-team/platform-team
+/services/backend/src/auth/ @nexus-team/security-team @nexus-team/backend-team
+/services/backend/src/secret-management/ @nexus-team/security-team @nexus-team/platform-team
+/.github/workflows/security-*.yml @nexus-team/security-team
+/.github/workflows/secret-*.yml @nexus-team/security-team
+
+# Backend Core Services
+/services/backend/ @nexus-team/backend-team
+/services/backend/src/database/ @nexus-team/backend-team @nexus-team/data-team
+/services/backend/src/monitoring/ @nexus-team/backend-team @nexus-team/platform-team
+/services/backend/src/feature-flags/ @nexus-team/backend-team @nexus-team/product-team
+
+# Frontend Applications
+/apps/frontend/ @nexus-team/frontend-team
+/apps/frontend/src/components/auth/ @nexus-team/frontend-team @nexus-team/security-team
+/apps/frontend/src/lib/monitoring.ts @nexus-team/frontend-team @nexus-team/platform-team
+
+# Shared Packages & Libraries
+/packages/ @nexus-team/platform-team
+/packages/monitoring/ @nexus-team/platform-team @nexus-team/backend-team
+/packages/feature-flags/ @nexus-team/platform-team @nexus-team/product-team
+/libs/ @nexus-team/developers
+
+# Database & Data
+/database/ @nexus-team/data-team @nexus-team/backend-team
+*.sql @nexus-team/data-team
+/services/backend/src/migrations/ @nexus-team/data-team @nexus-team/backend-team
+
+# Configuration Files
+package.json @nexus-team/platform-team
+pnpm-workspace.yaml @nexus-team/platform-team
+turbo.json @nexus-team/platform-team
+tsconfig*.json @nexus-team/platform-team
+.eslintrc* @nexus-team/platform-team
+.prettierrc* @nexus-team/platform-team
+
+# Docker & Containerization
+Dockerfile @nexus-team/platform-team @nexus-team/devops-team
+docker-compose*.yml @nexus-team/platform-team @nexus-team/devops-team
+.dockerignore @nexus-team/platform-team
+
+# CI/CD & Workflows
+/.github/workflows/ @nexus-team/platform-team @nexus-team/devops-team
+/.github/workflows/production-*.yml @nexus-team/platform-team @nexus-team/devops-team @nexus-team/security-team
+
+# Documentation
+/docs/ @nexus-team/tech-writers @nexus-team/platform-team
+README.md @nexus-team/tech-writers
+CONTRIBUTING.md @nexus-team/tech-writers @nexus-team/platform-team
+SECURITY.md @nexus-team/security-team @nexus-team/tech-writers
+
+# Testing
+/tests/ @nexus-team/qa-team @nexus-team/developers
+**/*.test.* @nexus-team/qa-team
+**/*.spec.* @nexus-team/qa-team
+/playwright.config.ts @nexus-team/qa-team @nexus-team/frontend-team
+/jest.config.* @nexus-team/qa-team @nexus-team/platform-team
+
+# Environment & Secrets (Extra protection)
+.env* @nexus-team/security-team @nexus-team/platform-team @nexus-team/devops-team
+*.key @nexus-team/security-team
+*.pem @nexus-team/security-team
+*.crt @nexus-team/security-team
+
+# Terraform & Infrastructure as Code
+*.tf @nexus-team/platform-team @nexus-team/devops-team
+*.tfvars @nexus-team/platform-team @nexus-team/devops-team @nexus-team/security-team
+/infrastructure/terraform/environments/production/ @nexus-team/platform-team @nexus-team/devops-team @nexus-team/security-team
+
+# Monitoring & Observability
+/k8s/monitoring/ @nexus-team/platform-team @nexus-team/sre-team
+/packages/monitoring/ @nexus-team/platform-team @nexus-team/sre-team
+
+# Feature Flags & Product
+/packages/feature-flags/ @nexus-team/product-team @nexus-team/platform-team
+/k8s/feature-flags/ @nexus-team/product-team @nexus-team/platform-team
+
+# Critical Business Logic
+/services/backend/src/billing/ @nexus-team/backend-team @nexus-team/finance-team
+/services/backend/src/payments/ @nexus-team/backend-team @nexus-team/finance-team @nexus-team/security-team
+/services/backend/src/subscriptions/ @nexus-team/backend-team @nexus-team/finance-team
+
+# API Definitions
+/services/backend/src/**/*.controller.ts @nexus-team/backend-team @nexus-team/api-team
+/services/backend/src/**/*.dto.ts @nexus-team/backend-team @nexus-team/api-team
+/openapi.yaml @nexus-team/api-team @nexus-team/backend-team
+
+# Performance Critical Files
+/services/backend/src/cache/ @nexus-team/backend-team @nexus-team/performance-team
+/services/backend/src/queue/ @nexus-team/backend-team @nexus-team/performance-team
+/apps/frontend/src/lib/performance.ts @nexus-team/frontend-team @nexus-team/performance-team
+
+# Mobile Applications (if they exist)
+/apps/mobile/ @nexus-team/mobile-team
+/apps/mobile/ios/ @nexus-team/mobile-team @nexus-team/ios-team
+/apps/mobile/android/ @nexus-team/mobile-team @nexus-team/android-team
+
+# Legal & Compliance
+LICENSE @nexus-team/legal-team
+PRIVACY.md @nexus-team/legal-team @nexus-team/security-team
+TERMS.md @nexus-team/legal-team
+
+# Release & Deployment
+CHANGELOG.md @nexus-team/platform-team @nexus-team/product-team
+/scripts/deploy-*.sh @nexus-team/platform-team @nexus-team/devops-team @nexus-team/security-team

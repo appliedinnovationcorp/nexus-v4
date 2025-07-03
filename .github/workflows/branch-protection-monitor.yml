@@ -1,0 +1,337 @@
+name: Branch Protection Monitor
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      send_notifications:
+        description: 'Send notifications for violations'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/CODEOWNERS'
+      - '.github/branch-protection-config.json'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  monitor-branch-protection:
+    runs-on: ubuntu-latest
+    name: Monitor Branch Protection Compliance
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Check branch protection compliance
+        id: compliance-check
+        run: |
+          set -e
+          
+          echo "=== Branch Protection Compliance Check ==="
+          echo "Repository: ${{ github.repository }}"
+          echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          
+          # Initialize compliance tracking
+          violations=0
+          compliance_report=""
+          
+          # Read expected configuration
+          if [ ! -f ".github/branch-protection-config.json" ]; then
+            echo "❌ Branch protection configuration file not found"
+            echo "compliance_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          config=$(cat .github/branch-protection-config.json)
+          expected_branches=$(echo "$config" | jq -r '.branch_protection_rules | keys[]')
+          
+          echo "Expected protected branches: $(echo "$expected_branches" | tr '\n' ', ' | sed 's/,$//')"
+          echo ""
+          
+          # Check each expected branch
+          for branch in $expected_branches; do
+            echo "=== Checking branch: $branch ==="
+            
+            # Check if branch exists
+            if ! gh api repos/${{ github.repository }}/branches/$branch >/dev/null 2>&1; then
+              echo "⚠️  Branch '$branch' does not exist"
+              compliance_report="${compliance_report}⚠️  Branch '$branch' does not exist\n"
+              continue
+            fi
+            
+            # Get expected configuration for this branch
+            expected_config=$(echo "$config" | jq -r ".branch_protection_rules.\"$branch\"")
+            
+            # Get current protection status
+            if ! current_protection=$(gh api repos/${{ github.repository }}/branches/$branch/protection 2>/dev/null); then
+              echo "❌ Branch '$branch' is not protected"
+              compliance_report="${compliance_report}❌ Branch '$branch' is not protected\n"
+              violations=$((violations + 1))
+              continue
+            fi
+            
+            echo "✅ Branch '$branch' is protected"
+            
+            # Check required status checks
+            expected_checks=$(echo "$expected_config" | jq -r '.required_status_checks.contexts[]?' 2>/dev/null || echo "")
+            current_checks=$(echo "$current_protection" | jq -r '.required_status_checks.contexts[]?' 2>/dev/null || echo "")
+            
+            if [ -n "$expected_checks" ]; then
+              echo "  Checking required status checks..."
+              for check in $expected_checks; do
+                if echo "$current_checks" | grep -q "^$check$"; then
+                  echo "    ✅ $check"
+                else
+                  echo "    ❌ Missing required check: $check"
+                  compliance_report="${compliance_report}❌ Branch '$branch' missing required check: $check\n"
+                  violations=$((violations + 1))
+                fi
+              done
+            fi
+            
+            # Check required reviews
+            expected_reviews=$(echo "$expected_config" | jq -r '.required_pull_request_reviews.required_approving_review_count' 2>/dev/null || echo "0")
+            current_reviews=$(echo "$current_protection" | jq -r '.required_pull_request_reviews.required_approving_review_count' 2>/dev/null || echo "0")
+            
+            if [ "$expected_reviews" != "0" ]; then
+              if [ "$current_reviews" -ge "$expected_reviews" ]; then
+                echo "  ✅ Required reviews: $current_reviews (expected: $expected_reviews)"
+              else
+                echo "  ❌ Insufficient required reviews: $current_reviews (expected: $expected_reviews)"
+                compliance_report="${compliance_report}❌ Branch '$branch' has insufficient required reviews: $current_reviews (expected: $expected_reviews)\n"
+                violations=$((violations + 1))
+              fi
+            fi
+            
+            # Check code owner reviews
+            expected_codeowner=$(echo "$expected_config" | jq -r '.required_pull_request_reviews.require_code_owner_reviews' 2>/dev/null || echo "false")
+            current_codeowner=$(echo "$current_protection" | jq -r '.required_pull_request_reviews.require_code_owner_reviews' 2>/dev/null || echo "false")
+            
+            if [ "$expected_codeowner" = "true" ]; then
+              if [ "$current_codeowner" = "true" ]; then
+                echo "  ✅ Code owner reviews required"
+              else
+                echo "  ❌ Code owner reviews not required"
+                compliance_report="${compliance_report}❌ Branch '$branch' does not require code owner reviews\n"
+                violations=$((violations + 1))
+              fi
+            fi
+            
+            # Check admin enforcement
+            expected_enforce_admins=$(echo "$expected_config" | jq -r '.enforce_admins' 2>/dev/null || echo "false")
+            current_enforce_admins=$(echo "$current_protection" | jq -r '.enforce_admins.enabled' 2>/dev/null || echo "false")
+            
+            if [ "$expected_enforce_admins" = "true" ]; then
+              if [ "$current_enforce_admins" = "true" ]; then
+                echo "  ✅ Admin enforcement enabled"
+              else
+                echo "  ❌ Admin enforcement disabled"
+                compliance_report="${compliance_report}❌ Branch '$branch' does not enforce rules for admins\n"
+                violations=$((violations + 1))
+              fi
+            fi
+            
+            echo ""
+          done
+          
+          # Check for unexpected protected branches
+          echo "=== Checking for unexpected protected branches ==="
+          all_branches=$(gh api repos/${{ github.repository }}/branches --jq '.[].name')
+          
+          for branch in $all_branches; do
+            if gh api repos/${{ github.repository }}/branches/$branch/protection >/dev/null 2>&1; then
+              if ! echo "$expected_branches" | grep -q "^$branch$"; then
+                echo "⚠️  Unexpected protected branch: $branch"
+                compliance_report="${compliance_report}⚠️  Unexpected protected branch: $branch\n"
+              fi
+            fi
+          done
+          
+          # Set output variables
+          echo "violations=$violations" >> $GITHUB_OUTPUT
+          echo "compliance_report<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$compliance_report" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          if [ $violations -eq 0 ]; then
+            echo "compliance_status=passed" >> $GITHUB_OUTPUT
+            echo ""
+            echo "🎉 All branch protection rules are compliant!"
+          else
+            echo "compliance_status=failed" >> $GITHUB_OUTPUT
+            echo ""
+            echo "❌ Found $violations compliance violations"
+          fi
+
+      - name: Check CODEOWNERS file
+        id: codeowners-check
+        run: |
+          echo "=== CODEOWNERS Compliance Check ==="
+          
+          codeowners_violations=0
+          codeowners_report=""
+          
+          if [ ! -f ".github/CODEOWNERS" ]; then
+            echo "❌ CODEOWNERS file not found"
+            codeowners_report="❌ CODEOWNERS file not found\n"
+            codeowners_violations=1
+          else
+            echo "✅ CODEOWNERS file exists"
+            
+            # Check for critical patterns from config
+            config=$(cat .github/branch-protection-config.json)
+            critical_patterns=$(echo "$config" | jq -r '.critical_file_patterns | to_entries[] | .value[]')
+            
+            echo "Checking coverage for critical file patterns..."
+            
+            while IFS= read -r pattern; do
+              if grep -q "$pattern" .github/CODEOWNERS; then
+                echo "  ✅ Pattern covered: $pattern"
+              else
+                echo "  ❌ Pattern not covered: $pattern"
+                codeowners_report="${codeowners_report}❌ Critical pattern not covered in CODEOWNERS: $pattern\n"
+                codeowners_violations=$((codeowners_violations + 1))
+              fi
+            done <<< "$critical_patterns"
+          fi
+          
+          echo "codeowners_violations=$codeowners_violations" >> $GITHUB_OUTPUT
+          echo "codeowners_report<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$codeowners_report" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate compliance report
+        id: generate-report
+        run: |
+          total_violations=$((${{ steps.compliance-check.outputs.violations }} + ${{ steps.codeowners-check.outputs.codeowners_violations }}))
+          
+          {
+            echo "# Branch Protection Compliance Report"
+            echo ""
+            echo "**Repository:** ${{ github.repository }}"
+            echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "**Status:** $([ $total_violations -eq 0 ] && echo "✅ COMPLIANT" || echo "❌ NON-COMPLIANT ($total_violations violations)")"
+            echo ""
+            
+            if [ ${{ steps.compliance-check.outputs.violations }} -gt 0 ]; then
+              echo "## Branch Protection Violations"
+              echo ""
+              echo -e "${{ steps.compliance-check.outputs.compliance_report }}"
+              echo ""
+            fi
+            
+            if [ ${{ steps.codeowners-check.outputs.codeowners_violations }} -gt 0 ]; then
+              echo "## CODEOWNERS Violations"
+              echo ""
+              echo -e "${{ steps.codeowners-check.outputs.codeowners_report }}"
+              echo ""
+            fi
+            
+            if [ $total_violations -eq 0 ]; then
+              echo "## ✅ All Checks Passed"
+              echo ""
+              echo "All branch protection rules and CODEOWNERS configurations are compliant."
+            else
+              echo "## 🔧 Recommended Actions"
+              echo ""
+              echo "1. Review the violations listed above"
+              echo "2. Run the branch protection setup workflow to fix configuration issues"
+              echo "3. Update CODEOWNERS file to cover critical file patterns"
+              echo "4. Ensure all required teams and reviewers are properly configured"
+            fi
+            
+            echo ""
+            echo "## Monitoring Configuration"
+            echo ""
+            echo "- **Monitoring Schedule:** Daily at 6 AM UTC"
+            echo "- **Configuration File:** \`.github/branch-protection-config.json\`"
+            echo "- **CODEOWNERS File:** \`.github/CODEOWNERS\`"
+            echo "- **Setup Workflow:** \`.github/workflows/branch-protection-setup.yml\`"
+            
+          } > compliance-report.md
+          
+          echo "total_violations=$total_violations" >> $GITHUB_OUTPUT
+
+      - name: Create or update compliance issue
+        if: steps.generate-report.outputs.total_violations > 0 && (github.event.inputs.send_notifications != 'false')
+        run: |
+          issue_title="🔒 Branch Protection Compliance Violations Detected"
+          issue_body=$(cat compliance-report.md)
+          
+          # Check if compliance issue already exists
+          existing_issue=$(gh issue list --label "compliance,branch-protection" --state open --json number,title | jq -r '.[] | select(.title | contains("Branch Protection Compliance")) | .number' | head -1)
+          
+          if [ -n "$existing_issue" ]; then
+            echo "Updating existing compliance issue #$existing_issue"
+            gh issue edit "$existing_issue" --body "$issue_body"
+            gh issue comment "$existing_issue" --body "🔄 Compliance check updated on $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          else
+            echo "Creating new compliance issue"
+            gh issue create \
+              --title "$issue_title" \
+              --body "$issue_body" \
+              --label "compliance,branch-protection,security" \
+              --assignee "@me"
+          fi
+
+      - name: Close compliance issue if resolved
+        if: steps.generate-report.outputs.total_violations == 0
+        run: |
+          # Find and close any open compliance issues
+          existing_issues=$(gh issue list --label "compliance,branch-protection" --state open --json number | jq -r '.[].number')
+          
+          for issue in $existing_issues; do
+            echo "Closing resolved compliance issue #$issue"
+            gh issue close "$issue" --comment "✅ All compliance violations have been resolved. Closing this issue."
+          done
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report-${{ github.run_number }}
+          path: compliance-report.md
+          retention-days: 90
+
+      - name: Set job status
+        run: |
+          if [ ${{ steps.generate-report.outputs.total_violations }} -gt 0 ]; then
+            echo "❌ Compliance check failed with ${{ steps.generate-report.outputs.total_violations }} violations"
+            exit 1
+          else
+            echo "✅ Compliance check passed"
+          fi

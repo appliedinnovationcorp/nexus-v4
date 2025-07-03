@@ -1,0 +1,423 @@
+name: Code Owner Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, review_requested, review_request_removed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  validate-codeowners:
+    name: Validate Code Owner Reviews
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate CODEOWNERS file
+        run: |
+          echo "🔍 Validating CODEOWNERS file..."
+          
+          if [ ! -f ".github/CODEOWNERS" ]; then
+            echo "❌ CODEOWNERS file not found"
+            exit 1
+          fi
+          
+          # Check for syntax errors
+          if grep -q "^[[:space:]]*#" .github/CODEOWNERS; then
+            echo "✅ CODEOWNERS file contains comments"
+          fi
+          
+          # Check for required patterns
+          required_patterns=(
+            "/.github/"
+            "/infrastructure/"
+            "/packages/secret-management/"
+            "/services/backend/src/auth/"
+          )
+          
+          for pattern in "${required_patterns[@]}"; do
+            if grep -q "$pattern" .github/CODEOWNERS; then
+              echo "✅ Found required pattern: $pattern"
+            else
+              echo "❌ Missing required pattern: $pattern"
+              exit 1
+            fi
+          done
+          
+          echo "✅ CODEOWNERS file validation passed"
+
+      - name: Check code owner coverage
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read CODEOWNERS file
+            const codeownersPath = '.github/CODEOWNERS';
+            const codeownersContent = fs.readFileSync(codeownersPath, 'utf8');
+            
+            // Parse CODEOWNERS rules
+            const rules = [];
+            const lines = codeownersContent.split('\n');
+            
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed && !trimmed.startsWith('#')) {
+                const parts = trimmed.split(/\s+/);
+                if (parts.length >= 2) {
+                  const pattern = parts[0];
+                  const owners = parts.slice(1);
+                  rules.push({ pattern, owners });
+                }
+              }
+            }
+            
+            console.log(`📋 Found ${rules.length} CODEOWNERS rules`);
+            
+            // Get changed files in PR
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            
+            console.log(`📁 Analyzing ${files.length} changed files...`);
+            
+            // Check coverage for each file
+            const uncoveredFiles = [];
+            const fileOwnership = new Map();
+            
+            for (const file of files) {
+              const filePath = file.filename;
+              let covered = false;
+              let matchingOwners = [];
+              
+              // Check each rule
+              for (const rule of rules) {
+                const pattern = rule.pattern;
+                
+                // Simple pattern matching (could be enhanced with glob patterns)
+                if (pattern === '*' || 
+                    filePath.startsWith(pattern.replace('*', '')) ||
+                    (pattern.endsWith('/') && filePath.startsWith(pattern)) ||
+                    filePath === pattern) {
+                  covered = true;
+                  matchingOwners = [...matchingOwners, ...rule.owners];
+                }
+              }
+              
+              if (covered) {
+                fileOwnership.set(filePath, [...new Set(matchingOwners)]);
+              } else {
+                uncoveredFiles.push(filePath);
+              }
+            }
+            
+            // Report results
+            if (uncoveredFiles.length > 0) {
+              console.log('⚠️ Files without code owner coverage:');
+              uncoveredFiles.forEach(file => console.log(`  - ${file}`));
+            } else {
+              console.log('✅ All changed files have code owner coverage');
+            }
+            
+            // Show file ownership
+            console.log('\n📊 File ownership summary:');
+            for (const [file, owners] of fileOwnership.entries()) {
+              console.log(`  ${file}: ${owners.join(', ')}`);
+            }
+            
+            return {
+              totalFiles: files.length,
+              coveredFiles: files.length - uncoveredFiles.length,
+              uncoveredFiles: uncoveredFiles.length,
+              fileOwnership: Object.fromEntries(fileOwnership)
+            };
+
+      - name: Check required reviews
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            
+            // Get PR reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            // Get changed files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            console.log('🔍 Checking code owner review requirements...');
+            
+            // Define critical paths that require specific team reviews
+            const criticalPaths = {
+              'security': [
+                '.github/',
+                'packages/secret-management/',
+                'services/backend/src/auth/',
+                'services/backend/src/secret-management/',
+                '.env'
+              ],
+              'platform': [
+                'infrastructure/',
+                'k8s/',
+                'scripts/',
+                'Dockerfile',
+                'docker-compose'
+              ],
+              'backend': [
+                'services/backend/',
+                'packages/monitoring/'
+              ],
+              'frontend': [
+                'apps/frontend/'
+              ]
+            };
+            
+            // Check which critical areas are affected
+            const affectedAreas = new Set();
+            for (const file of files) {
+              for (const [area, paths] of Object.entries(criticalPaths)) {
+                if (paths.some(path => file.filename.startsWith(path))) {
+                  affectedAreas.add(area);
+                }
+              }
+            }
+            
+            console.log(`🎯 Affected critical areas: ${Array.from(affectedAreas).join(', ')}`);
+            
+            // Get approved reviews from code owners
+            const approvedReviews = reviews.filter(review => 
+              review.state === 'APPROVED' && 
+              review.user.type === 'User'
+            );
+            
+            console.log(`✅ Approved reviews: ${approvedReviews.length}`);
+            approvedReviews.forEach(review => {
+              console.log(`  - ${review.user.login} (${review.submitted_at})`);
+            });
+            
+            // Check if we have sufficient reviews for critical areas
+            const requiredReviews = {
+              'security': 2,  // Security changes need 2 approvals
+              'platform': 2, // Platform changes need 2 approvals
+              'backend': 1,   // Backend changes need 1 approval
+              'frontend': 1   // Frontend changes need 1 approval
+            };
+            
+            let reviewsNeeded = 0;
+            const missingReviews = [];
+            
+            for (const area of affectedAreas) {
+              const required = requiredReviews[area] || 1;
+              if (approvedReviews.length < required) {
+                reviewsNeeded = Math.max(reviewsNeeded, required);
+                missingReviews.push(`${area} (needs ${required})`);
+              }
+            }
+            
+            if (reviewsNeeded > approvedReviews.length) {
+              const needed = reviewsNeeded - approvedReviews.length;
+              console.log(`❌ Missing ${needed} required review(s) for: ${missingReviews.join(', ')}`);
+              
+              // Set commit status
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: pr.head.sha,
+                state: 'pending',
+                target_url: `${context.payload.repository.html_url}/pull/${pr.number}`,
+                description: `Missing ${needed} required code owner review(s)`,
+                context: 'codeowners/review-required'
+              });
+              
+              return false;
+            } else {
+              console.log('✅ All required code owner reviews obtained');
+              
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: pr.head.sha,
+                state: 'success',
+                target_url: `${context.payload.repository.html_url}/pull/${pr.number}`,
+                description: 'All required code owner reviews obtained',
+                context: 'codeowners/review-required'
+              });
+              
+              return true;
+            }
+
+      - name: Check review freshness
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            
+            // Get PR reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            // Get PR commits
+            const { data: commits } = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            if (commits.length === 0) return;
+            
+            const lastCommitDate = new Date(commits[commits.length - 1].commit.author.date);
+            console.log(`📅 Last commit: ${lastCommitDate.toISOString()}`);
+            
+            // Check if approved reviews are still valid (after last commit)
+            const validReviews = reviews.filter(review => {
+              if (review.state !== 'APPROVED') return false;
+              const reviewDate = new Date(review.submitted_at);
+              return reviewDate > lastCommitDate;
+            });
+            
+            const staleReviews = reviews.filter(review => {
+              if (review.state !== 'APPROVED') return false;
+              const reviewDate = new Date(review.submitted_at);
+              return reviewDate <= lastCommitDate;
+            });
+            
+            console.log(`✅ Valid reviews (after last commit): ${validReviews.length}`);
+            console.log(`⚠️ Stale reviews (before last commit): ${staleReviews.length}`);
+            
+            if (staleReviews.length > 0) {
+              console.log('📝 Stale reviews from:');
+              staleReviews.forEach(review => {
+                console.log(`  - ${review.user.login} (${review.submitted_at})`);
+              });
+              console.log('💡 Consider re-requesting reviews after recent changes');
+            }
+            
+            return {
+              validReviews: validReviews.length,
+              staleReviews: staleReviews.length,
+              lastCommit: lastCommitDate.toISOString()
+            };
+
+      - name: Generate code owner report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            
+            // Create a comprehensive report
+            let report = `## 👥 Code Owner Review Status\n\n`;
+            
+            // Get changed files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            // Get reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            
+            const approvedReviews = reviews.filter(r => r.state === 'APPROVED');
+            const requestedReviews = reviews.filter(r => r.state === 'CHANGES_REQUESTED');
+            
+            report += `### 📊 Review Summary\n`;
+            report += `- **Files changed**: ${files.length}\n`;
+            report += `- **Approved reviews**: ${approvedReviews.length}\n`;
+            report += `- **Changes requested**: ${requestedReviews.length}\n\n`;
+            
+            // Critical areas affected
+            const criticalFiles = files.filter(file => 
+              file.filename.startsWith('.github/') ||
+              file.filename.startsWith('infrastructure/') ||
+              file.filename.startsWith('packages/secret-management/') ||
+              file.filename.startsWith('services/backend/src/auth/')
+            );
+            
+            if (criticalFiles.length > 0) {
+              report += `### 🚨 Critical Files Changed\n`;
+              report += `The following critical files require additional review:\n\n`;
+              criticalFiles.forEach(file => {
+                report += `- \`${file.filename}\`\n`;
+              });
+              report += `\n`;
+            }
+            
+            // Review status
+            if (approvedReviews.length > 0) {
+              report += `### ✅ Approved Reviews\n`;
+              approvedReviews.forEach(review => {
+                report += `- **${review.user.login}** (${new Date(review.submitted_at).toLocaleDateString()})\n`;
+              });
+              report += `\n`;
+            }
+            
+            if (requestedReviews.length > 0) {
+              report += `### 🔄 Changes Requested\n`;
+              requestedReviews.forEach(review => {
+                report += `- **${review.user.login}** (${new Date(review.submitted_at).toLocaleDateString()})\n`;
+              });
+              report += `\n`;
+            }
+            
+            report += `### 📋 Next Steps\n`;
+            if (criticalFiles.length > 0 && approvedReviews.length < 2) {
+              report += `- ⏳ Waiting for required code owner reviews\n`;
+              report += `- 🔍 Critical files require review from security and platform teams\n`;
+            } else if (approvedReviews.length === 0) {
+              report += `- ⏳ Waiting for code owner reviews\n`;
+            } else {
+              report += `- ✅ Code owner review requirements satisfied\n`;
+            }
+            
+            report += `\n---\n*Updated automatically by Code Owner Validation*`;
+            
+            // Update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: pr.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.body.includes('Code Owner Review Status') && 
+              comment.user.type === 'Bot'
+            );
+            
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: pr.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }

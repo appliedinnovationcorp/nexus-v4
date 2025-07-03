@@ -1,0 +1,589 @@
+name: Branch Protection Enforcement
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  statuses: write
+
+jobs:
+  # Validate branch protection requirements
+  validate-branch-protection:
+    name: Validate Branch Protection
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR requirements
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { context } = require('@actions/github');
+            const pr = context.payload.pull_request;
+            
+            console.log('🔍 Validating PR requirements...');
+            
+            // Check if PR is draft
+            if (pr.draft) {
+              core.setFailed('❌ Draft PRs cannot be merged. Please mark as ready for review.');
+              return;
+            }
+            
+            // Check PR title format
+            const titlePattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?: .+/;
+            if (!titlePattern.test(pr.title)) {
+              core.setFailed('❌ PR title must follow conventional commit format: type(scope): description');
+              return;
+            }
+            
+            // Check PR description
+            if (!pr.body || pr.body.trim().length < 20) {
+              core.setFailed('❌ PR must have a meaningful description (at least 20 characters)');
+              return;
+            }
+            
+            // Check for breaking changes
+            if (pr.title.includes('!') || pr.body.includes('BREAKING CHANGE')) {
+              console.log('⚠️ Breaking change detected - additional review required');
+            }
+            
+            console.log('✅ PR requirements validated');
+
+      - name: Check file changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { context } = require('@actions/github');
+            
+            // Get changed files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            
+            console.log(`📁 Analyzing ${files.length} changed files...`);
+            
+            const criticalPaths = [
+              '.github/',
+              'infrastructure/',
+              'k8s/',
+              'packages/secret-management/',
+              'services/backend/src/auth/',
+              'Dockerfile',
+              'docker-compose',
+              '.env',
+              'package.json',
+              'pnpm-workspace.yaml'
+            ];
+            
+            const criticalFiles = files.filter(file => 
+              criticalPaths.some(path => file.filename.startsWith(path))
+            );
+            
+            if (criticalFiles.length > 0) {
+              console.log('🚨 Critical files changed:');
+              criticalFiles.forEach(file => console.log(`  - ${file.filename}`));
+              console.log('⚠️ Additional security and platform team review required');
+            }
+            
+            // Check for large PRs
+            const totalChanges = files.reduce((sum, file) => sum + file.changes, 0);
+            if (totalChanges > 1000) {
+              console.log(`⚠️ Large PR detected: ${totalChanges} changes`);
+              console.log('Consider breaking this into smaller PRs for easier review');
+            }
+            
+            // Check for deleted files
+            const deletedFiles = files.filter(file => file.status === 'removed');
+            if (deletedFiles.length > 0) {
+              console.log('🗑️ Files being deleted:');
+              deletedFiles.forEach(file => console.log(`  - ${file.filename}`));
+            }
+
+  # Code quality checks
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run linting
+        run: |
+          echo "## Code Quality Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Run ESLint with detailed output
+          if pnpm lint --format=json --output-file=eslint-results.json; then
+            echo "✅ Linting passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Linting failed" >> $GITHUB_STEP_SUMMARY
+            echo "### ESLint Issues:" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat eslint-results.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Run type checking
+        run: |
+          if pnpm type-check; then
+            echo "✅ Type checking passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Type checking failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Check code formatting
+        run: |
+          if pnpm prettier --check .; then
+            echo "✅ Code formatting is correct" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Code formatting issues found" >> $GITHUB_STEP_SUMMARY
+            echo "Run 'pnpm prettier --write .' to fix formatting" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload lint results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-results
+          path: eslint-results.json
+          retention-days: 7
+
+  # Unit tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: |
+          echo "## Unit Test Results" >> $GITHUB_STEP_SUMMARY
+          
+          if pnpm test --coverage --reporter=json --outputFile=test-results.json; then
+            echo "✅ All unit tests passed" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract coverage information
+            COVERAGE=$(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')
+            echo "📊 Code coverage: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+            
+            # Fail if coverage is below threshold
+            if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+              echo "❌ Code coverage below 80% threshold" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+          else
+            echo "❌ Unit tests failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            test-results.json
+            coverage/
+          retention-days: 7
+
+  # Integration tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nexus_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/nexus_test
+        run: |
+          # Run migrations if they exist
+          if [ -f "services/backend/src/migrations" ]; then
+            pnpm --filter backend migrate
+          fi
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/nexus_test
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+        run: |
+          echo "## Integration Test Results" >> $GITHUB_STEP_SUMMARY
+          
+          if pnpm test:integration; then
+            echo "✅ All integration tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Integration tests failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  # E2E tests (critical requirement)
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Build applications
+        run: pnpm build
+
+      - name: Start test environment
+        run: |
+          # Start the application in test mode
+          pnpm start:test &
+          
+          # Wait for application to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:3000/health; do sleep 2; done'
+
+      - name: Run E2E tests
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          
+          if pnpm test:e2e; then
+            echo "✅ All E2E tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ E2E tests failed" >> $GITHUB_STEP_SUMMARY
+            echo "E2E tests are required to pass before merging to main" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  # Security checks (required)
+  security-checks:
+    name: Security Checks
+    uses: ./.github/workflows/security-scanning.yml
+    secrets: inherit
+
+  # Performance tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'performance')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build applications
+        run: pnpm build
+
+      - name: Run performance tests
+        run: |
+          echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Run Lighthouse CI or other performance tests
+          if pnpm test:performance; then
+            echo "✅ Performance tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Performance tests failed or degraded" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Accessibility tests
+  accessibility-tests:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'frontend') || contains(github.event.pull_request.labels.*.name, 'accessibility'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build applications
+        run: pnpm build
+
+      - name: Run accessibility tests
+        run: |
+          echo "## Accessibility Test Results" >> $GITHUB_STEP_SUMMARY
+          
+          if pnpm test:a11y; then
+            echo "✅ Accessibility tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Accessibility tests failed" >> $GITHUB_STEP_SUMMARY
+            echo "Accessibility issues must be fixed before merging" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  # Final status check
+  branch-protection-status:
+    name: Branch Protection Status
+    runs-on: ubuntu-latest
+    needs: [
+      validate-branch-protection,
+      code-quality,
+      unit-tests,
+      integration-tests,
+      e2e-tests,
+      security-checks
+    ]
+    if: always()
+    
+    steps:
+      - name: Check all required checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requiredChecks = [
+              'validate-branch-protection',
+              'code-quality', 
+              'unit-tests',
+              'integration-tests',
+              'e2e-tests',
+              'security-checks'
+            ];
+            
+            const results = {
+              'validate-branch-protection': '${{ needs.validate-branch-protection.result }}',
+              'code-quality': '${{ needs.code-quality.result }}',
+              'unit-tests': '${{ needs.unit-tests.result }}',
+              'integration-tests': '${{ needs.integration-tests.result }}',
+              'e2e-tests': '${{ needs.e2e-tests.result }}',
+              'security-checks': '${{ needs.security-checks.result }}'
+            };
+            
+            console.log('## Branch Protection Status Check');
+            console.log('================================');
+            
+            let allPassed = true;
+            for (const [check, result] of Object.entries(results)) {
+              const status = result === 'success' ? '✅' : '❌';
+              console.log(`${status} ${check}: ${result}`);
+              if (result !== 'success') {
+                allPassed = false;
+              }
+            }
+            
+            if (allPassed) {
+              console.log('\n🎉 All required checks passed! PR is ready for review and merge.');
+              
+              // Set commit status
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.sha,
+                state: 'success',
+                target_url: `${context.payload.repository.html_url}/actions/runs/${context.runId}`,
+                description: 'All branch protection checks passed',
+                context: 'branch-protection/all-checks'
+              });
+            } else {
+              console.log('\n❌ Some required checks failed. PR cannot be merged until all checks pass.');
+              
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.sha,
+                state: 'failure',
+                target_url: `${context.payload.repository.html_url}/actions/runs/${context.runId}`,
+                description: 'Branch protection checks failed',
+                context: 'branch-protection/all-checks'
+              });
+              
+              core.setFailed('Required branch protection checks failed');
+            }
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const results = {
+              'validate-branch-protection': '${{ needs.validate-branch-protection.result }}',
+              'code-quality': '${{ needs.code-quality.result }}',
+              'unit-tests': '${{ needs.unit-tests.result }}',
+              'integration-tests': '${{ needs.integration-tests.result }}',
+              'e2e-tests': '${{ needs.e2e-tests.result }}',
+              'security-checks': '${{ needs.security-checks.result }}'
+            };
+            
+            const allPassed = Object.values(results).every(result => result === 'success');
+            
+            const statusEmoji = allPassed ? '✅' : '❌';
+            const statusText = allPassed ? 'PASSED' : 'FAILED';
+            
+            let comment = `## ${statusEmoji} Branch Protection Status: ${statusText}\n\n`;
+            comment += '### Required Checks:\n';
+            
+            for (const [check, result] of Object.entries(results)) {
+              const emoji = result === 'success' ? '✅' : '❌';
+              const displayName = check.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              comment += `- ${emoji} **${displayName}**: ${result}\n`;
+            }
+            
+            if (allPassed) {
+              comment += '\n🎉 **All checks passed!** This PR meets all branch protection requirements and is ready for code owner review.\n';
+            } else {
+              comment += '\n⚠️ **Action Required**: Please fix the failing checks before this PR can be merged.\n';
+            }
+            
+            comment += '\n---\n*Automated by Branch Protection Enforcement*';
+            
+            // Check if we already commented
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.body.includes('Branch Protection Status') && 
+              comment.user.type === 'Bot'
+            );
+            
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                comment_id: existingComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
