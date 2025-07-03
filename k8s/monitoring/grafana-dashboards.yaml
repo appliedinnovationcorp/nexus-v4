@@ -1,0 +1,318 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  nexus-workspace-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Nexus Workspace - System Overview",
+        "tags": ["nexus", "overview"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Application Health",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=\"nexus-workspace-app\"}",
+                "legendFormat": "{{instance}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total[5m])",
+                "legendFormat": "{{method}} {{status}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "Requests/sec", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Response Time (95th percentile)",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "95th percentile"
+              }
+            ],
+            "yAxes": [
+              {"label": "Seconds", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+                "legendFormat": "5xx errors"
+              }
+            ],
+            "yAxes": [
+              {"label": "Errors/sec", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 5,
+            "title": "CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{pod=~\"nexus-workspace-.*\"}[5m]) * 100",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "CPU %", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 6,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{pod=~\"nexus-workspace-.*\"} / 1024 / 1024",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "Memory (MB)", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }
+
+  nexus-workspace-database.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Nexus Workspace - Database Metrics",
+        "tags": ["nexus", "database", "postgresql"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Database Connections",
+            "type": "graph",
+            "targets": [
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "DatabaseConnections",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              }
+            ],
+            "yAxes": [
+              {"label": "Connections", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "CPU Utilization",
+            "type": "graph",
+            "targets": [
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "CPUUtilization",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              }
+            ],
+            "yAxes": [
+              {"label": "CPU %", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Read/Write Latency",
+            "type": "graph",
+            "targets": [
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "ReadLatency",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              },
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "WriteLatency",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              }
+            ],
+            "yAxes": [
+              {"label": "Latency (ms)", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "IOPS",
+            "type": "graph",
+            "targets": [
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "ReadIOPS",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              },
+              {
+                "namespace": "AWS/RDS",
+                "metricName": "WriteIOPS",
+                "dimensions": {
+                  "DBInstanceIdentifier": "nexus-workspace-production-db"
+                },
+                "statistics": ["Average"]
+              }
+            ],
+            "yAxes": [
+              {"label": "IOPS", "min": 0}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }
+
+  nexus-workspace-infrastructure.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Nexus Workspace - Infrastructure",
+        "tags": ["nexus", "infrastructure", "kubernetes"],
+        "style": "dark",
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Node Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "kube_node_status_condition{condition=\"Ready\",status=\"true\"}",
+                "legendFormat": "{{node}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Pod Status",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "kube_pod_status_phase{namespace=\"default\"}",
+                "legendFormat": "{{phase}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Cluster CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "{{instance}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "CPU %", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "Cluster Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "{{instance}}"
+              }
+            ],
+            "yAxes": [
+              {"label": "Memory %", "min": 0, "max": 100}
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }

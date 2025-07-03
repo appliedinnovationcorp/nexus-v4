@@ -1,4 +1,4 @@
-# Monitoring and Alerting Configuration
+# Centralized Monitoring and Alerting Configuration with Datadog Integration
 
 # SNS topic for alerts
 resource "aws_sns_topic" "alerts" {
@@ -28,6 +28,86 @@ resource "aws_kms_alias" "sns" {
 
   name          = "alias/${local.cluster_name}-sns"
   target_key_id = aws_kms_key.sns[0].key_id
+}
+
+# Datadog Integration Resources
+resource "aws_secretsmanager_secret" "datadog_api_key" {
+  count       = var.enable_datadog ? 1 : 0
+  name        = "${var.project_name}-${var.environment}-datadog-api-key"
+  description = "Datadog API key for ${var.environment} environment"
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "datadog_api_key" {
+  count         = var.enable_datadog ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.datadog_api_key[0].id
+  secret_string = var.datadog_api_key
+}
+
+# IAM role for Datadog AWS integration
+resource "aws_iam_role" "datadog_integration" {
+  count = var.enable_datadog ? 1 : 0
+  name  = "${var.project_name}-${var.environment}-datadog-integration"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::464622532012:root" # Datadog AWS Account
+        }
+        Condition = {
+          StringEquals = {
+            "sts:ExternalId" = var.datadog_external_id
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_iam_role_policy" "datadog_integration" {
+  count = var.enable_datadog ? 1 : 0
+  name  = "${var.project_name}-${var.environment}-datadog-policy"
+  role  = aws_iam_role.datadog_integration[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:List*",
+          "cloudwatch:Get*",
+          "ec2:Describe*",
+          "support:*",
+          "tag:GetResources",
+          "tag:GetTagKeys",
+          "tag:GetTagValues",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:FilterLogEvents",
+          "logs:GetLogEvents",
+          "rds:Describe*",
+          "rds:List*",
+          "eks:DescribeCluster",
+          "eks:ListClusters"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 # CloudWatch Dashboard

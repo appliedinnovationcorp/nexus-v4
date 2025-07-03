@@ -143,6 +143,40 @@ variable "log_retention_days" {
   default     = 30
 }
 
+# Datadog Configuration
+variable "enable_datadog" {
+  description = "Enable Datadog integration"
+  type        = bool
+  default     = false
+}
+
+variable "datadog_api_key" {
+  description = "Datadog API key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "datadog_external_id" {
+  description = "Datadog external ID for AWS integration"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "enable_grafana" {
+  description = "Enable Grafana deployment"
+  type        = bool
+  default     = false
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # Security Configuration
 variable "allowed_cidr_blocks" {
   description = "CIDR blocks allowed to access the cluster"
