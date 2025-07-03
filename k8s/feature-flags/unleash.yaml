@@ -1,0 +1,215 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: feature-flags
+  labels:
+    name: feature-flags
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unleash-config
+  namespace: feature-flags
+data:
+  DATABASE_URL: "postgres://unleash:unleash@unleash-postgres:5432/unleash"
+  DATABASE_SSL: "false"
+  LOG_LEVEL: "info"
+  INIT_FRONTEND_API_TOKENS: "default:development.unleash-insecure-frontend-api-token"
+  INIT_CLIENT_API_TOKENS: "default:development.unleash-insecure-api-token"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: unleash-secrets
+  namespace: feature-flags
+type: Opaque
+data:
+  # Base64 encoded values - update these in production
+  UNLEASH_SECRET: dW5sZWFzaC1zZWNyZXQtdG9rZW4= # unleash-secret-token
+  DATABASE_PASSWORD: dW5sZWFzaA== # unleash
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unleash-postgres
+  namespace: feature-flags
+  labels:
+    app: unleash-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unleash-postgres
+  template:
+    metadata:
+      labels:
+        app: unleash-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "unleash"
+        - name: POSTGRES_USER
+          value: "unleash"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: unleash-secrets
+              key: DATABASE_PASSWORD
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: postgres-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unleash-postgres
+  namespace: feature-flags
+  labels:
+    app: unleash-postgres
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: unleash-postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unleash
+  namespace: feature-flags
+  labels:
+    app: unleash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unleash
+  template:
+    metadata:
+      labels:
+        app: unleash
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h unleash-postgres -p 5432 -U unleash; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+      containers:
+      - name: unleash
+        image: unleashorg/unleash-server:5.7
+        ports:
+        - containerPort: 4242
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: unleash-config
+              key: DATABASE_URL
+        - name: DATABASE_SSL
+          valueFrom:
+            configMapKeyRef:
+              name: unleash-config
+              key: DATABASE_SSL
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: unleash-config
+              key: LOG_LEVEL
+        - name: INIT_FRONTEND_API_TOKENS
+          valueFrom:
+            configMapKeyRef:
+              name: unleash-config
+              key: INIT_FRONTEND_API_TOKENS
+        - name: INIT_CLIENT_API_TOKENS
+          valueFrom:
+            configMapKeyRef:
+              name: unleash-config
+              key: INIT_CLIENT_API_TOKENS
+        - name: UNLEASH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: unleash-secrets
+              key: UNLEASH_SECRET
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4242
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4242
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unleash
+  namespace: feature-flags
+  labels:
+    app: unleash
+spec:
+  ports:
+  - port: 4242
+    targetPort: 4242
+    name: http
+  selector:
+    app: unleash
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unleash
+  namespace: feature-flags
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - unleash.nexus-workspace.com
+    secretName: unleash-tls
+  rules:
+  - host: unleash.nexus-workspace.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: unleash
+            port:
+              number: 4242
