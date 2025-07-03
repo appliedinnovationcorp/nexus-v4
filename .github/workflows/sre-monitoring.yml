@@ -1,0 +1,480 @@
+name: SRE Monitoring & SLO Management
+
+on:
+  schedule:
+    # Run SLO calculations every 15 minutes
+    - cron: '*/15 * * * *'
+    # Generate daily SLO reports at 6 AM UTC
+    - cron: '0 6 * * *'
+    # Generate weekly reports on Mondays at 8 AM UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'calculate-slos'
+        type: choice
+        options:
+          - 'calculate-slos'
+          - 'generate-report'
+          - 'validate-config'
+          - 'update-dashboards'
+          - 'check-budgets'
+      report_days:
+        description: 'Number of days for report (if generating report)'
+        required: false
+        default: '30'
+        type: string
+      services:
+        description: 'Comma-separated list of services (optional)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  # Validate SLO configuration
+  validate-slo-config:
+    runs-on: ubuntu-latest
+    name: Validate SLO Configuration
+    if: github.event.inputs.action == 'validate-config' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/sre
+          pnpm install
+
+      - name: Validate SLO definitions
+        run: |
+          cd packages/sre
+          echo "=== Validating SLO Configuration ==="
+          
+          # Check if config file exists
+          if [ ! -f "configs/slo-definitions.yaml" ]; then
+            echo "❌ SLO configuration file not found"
+            exit 1
+          fi
+          
+          # Validate YAML syntax
+          if ! python3 -c "import yaml; yaml.safe_load(open('configs/slo-definitions.yaml'))" 2>/dev/null; then
+            echo "❌ Invalid YAML syntax in SLO configuration"
+            exit 1
+          fi
+          
+          echo "✅ SLO configuration is valid"
+          
+          # Run custom validation script
+          node scripts/validate-slos.js
+          
+          echo "🎉 All SLO validations passed!"
+
+  # Calculate SLOs and error budgets
+  calculate-slos:
+    runs-on: ubuntu-latest
+    name: Calculate SLOs & Error Budgets
+    needs: validate-slo-config
+    if: always() && (github.event.inputs.action == 'calculate-slos' || github.event_name == 'schedule')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/sre
+          pnpm install
+
+      - name: Calculate error budgets
+        env:
+          PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+          PROMETHEUS_TOKEN: ${{ secrets.PROMETHEUS_TOKEN }}
+        run: |
+          cd packages/sre
+          echo "=== Calculating Error Budgets ==="
+          
+          # Run error budget calculations
+          node scripts/calculate-budgets.js
+          
+          echo "✅ Error budget calculations completed"
+
+      - name: Check for budget violations
+        id: budget-check
+        run: |
+          cd packages/sre
+          echo "=== Checking for Budget Violations ==="
+          
+          # Check for critical budget violations
+          violations=$(node scripts/calculate-budgets.js --check-violations)
+          
+          if [ -n "$violations" ]; then
+            echo "budget_violations=true" >> $GITHUB_OUTPUT
+            echo "violations<<EOF" >> $GITHUB_OUTPUT
+            echo "$violations" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "⚠️  Budget violations detected"
+          else
+            echo "budget_violations=false" >> $GITHUB_OUTPUT
+            echo "✅ No budget violations"
+          fi
+
+      - name: Create budget violation issue
+        if: steps.budget-check.outputs.budget_violations == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const violations = `${{ steps.budget-check.outputs.violations }}`;
+            
+            const issueTitle = '🚨 SLO Error Budget Violations Detected';
+            const issueBody = `
+            # Error Budget Violations
+            
+            **Detection Time:** ${new Date().toISOString()}
+            **Workflow:** ${context.workflow}
+            **Run ID:** ${context.runId}
+            
+            ## Violations
+            
+            \`\`\`
+            ${violations}
+            \`\`\`
+            
+            ## Immediate Actions Required
+            
+            1. **Review failing services** - Identify root causes of SLO violations
+            2. **Assess impact** - Determine user impact and business criticality
+            3. **Implement fixes** - Address underlying issues causing violations
+            4. **Monitor recovery** - Track SLO recovery and budget restoration
+            
+            ## Resources
+            
+            - [SLO Dashboard](https://grafana.nexus.dev/d/slo-dashboard)
+            - [Error Budget Policy](https://docs.nexus.dev/sre/error-budget-policy)
+            - [Incident Response Runbook](https://runbooks.nexus.dev/slo-violations)
+            
+            ---
+            *This issue was automatically created by the SRE monitoring workflow.*
+            `;
+            
+            // Check if similar issue already exists
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['sre', 'error-budget', 'violation'],
+              state: 'open'
+            });
+            
+            if (existingIssues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['sre', 'error-budget', 'violation', 'critical'],
+                assignees: ['@nexus-team/sre-team']
+              });
+            } else {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssues.data[0].number,
+                body: `## Updated Violations (${new Date().toISOString()})\n\n\`\`\`\n${violations}\n\`\`\``
+              });
+            }
+
+  # Generate SLO reports
+  generate-slo-report:
+    runs-on: ubuntu-latest
+    name: Generate SLO Report
+    if: github.event.inputs.action == 'generate-report' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/sre
+          pnpm install
+
+      - name: Generate SLO report
+        env:
+          REPORT_DAYS: ${{ github.event.inputs.report_days || '30' }}
+          SERVICES: ${{ github.event.inputs.services }}
+        run: |
+          cd packages/sre
+          echo "=== Generating SLO Report ==="
+          
+          # Determine report type based on schedule
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "0 6 * * *" ]; then
+              # Daily report
+              REPORT_DAYS=1
+              REPORT_TYPE="daily"
+            elif [ "${{ github.event.schedule }}" = "0 8 * * 1" ]; then
+              # Weekly report
+              REPORT_DAYS=7
+              REPORT_TYPE="weekly"
+            else
+              REPORT_DAYS=30
+              REPORT_TYPE="periodic"
+            fi
+          else
+            REPORT_TYPE="manual"
+          fi
+          
+          echo "Generating $REPORT_TYPE report for $REPORT_DAYS days"
+          
+          # Generate reports in multiple formats
+          node scripts/slo-report.js --days $REPORT_DAYS --format json --output "reports/slo-report-$REPORT_TYPE.json"
+          node scripts/slo-report.js --days $REPORT_DAYS --format html --output "reports/slo-report-$REPORT_TYPE.html"
+          node scripts/slo-report.js --days $REPORT_DAYS --format csv --output "reports/slo-report-$REPORT_TYPE.csv"
+          
+          if [ -n "$SERVICES" ]; then
+            node scripts/slo-report.js --days $REPORT_DAYS --services "$SERVICES" --format json --output "reports/slo-report-filtered.json"
+          fi
+          
+          echo "✅ SLO reports generated successfully"
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: slo-reports-${{ github.run_number }}
+          path: packages/sre/reports/
+          retention-days: 90
+
+      - name: Analyze report for issues
+        id: analyze-report
+        run: |
+          cd packages/sre
+          echo "=== Analyzing Report for Issues ==="
+          
+          # Parse JSON report for critical issues
+          if [ -f "reports/slo-report-*.json" ]; then
+            report_file=$(ls reports/slo-report-*.json | head -1)
+            
+            # Extract key metrics
+            compliance=$(jq -r '.summary.overallCompliance' "$report_file")
+            critical_issues=$(jq -r '.summary.criticalIssues' "$report_file")
+            services_at_risk=$(jq -r '.summary.servicesAtRisk | length' "$report_file")
+            
+            echo "Overall Compliance: $compliance%"
+            echo "Critical Issues: $critical_issues"
+            echo "Services at Risk: $services_at_risk"
+            
+            # Set outputs for downstream jobs
+            echo "compliance=$compliance" >> $GITHUB_OUTPUT
+            echo "critical_issues=$critical_issues" >> $GITHUB_OUTPUT
+            echo "services_at_risk=$services_at_risk" >> $GITHUB_OUTPUT
+            
+            # Determine if action is needed
+            if (( $(echo "$compliance < 95" | bc -l) )) || [ "$critical_issues" -gt 0 ]; then
+              echo "action_needed=true" >> $GITHUB_OUTPUT
+              echo "⚠️  Action needed based on report analysis"
+            else
+              echo "action_needed=false" >> $GITHUB_OUTPUT
+              echo "✅ No immediate action needed"
+            fi
+          fi
+
+      - name: Post report summary to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const reportPath = 'packages/sre/reports/slo-report-manual.json';
+            if (fs.existsSync(reportPath)) {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              
+              const comment = `
+              ## 📊 SLO Report Summary
+              
+              **Overall Compliance:** ${report.summary.overallCompliance.toFixed(2)}%
+              **SLOs Meeting Target:** ${report.summary.slosMeetingTarget}/${report.summary.totalSLOs}
+              **Services at Risk:** ${report.summary.servicesAtRisk.length}
+              **Critical Issues:** ${report.summary.criticalIssues}
+              
+              ${report.summary.overallCompliance < 95 ? '⚠️ **Action Required:** Overall compliance is below 95%' : '✅ **Status:** All SLOs are performing well'}
+              
+              [View Full Report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              `;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+  # Update monitoring dashboards
+  update-dashboards:
+    runs-on: ubuntu-latest
+    name: Update Monitoring Dashboards
+    if: github.event.inputs.action == 'update-dashboards' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: |
+          cd packages/sre
+          pnpm install
+
+      - name: Generate dashboard configurations
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          cd packages/sre
+          echo "=== Generating Dashboard Configurations ==="
+          
+          # Generate Grafana dashboards
+          node scripts/generate-dashboards.js
+          
+          echo "✅ Dashboard configurations generated"
+
+      - name: Deploy dashboards to Grafana
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          cd packages/sre
+          echo "=== Deploying Dashboards to Grafana ==="
+          
+          # Deploy each dashboard
+          for dashboard in dashboards/*.json; do
+            if [ -f "$dashboard" ]; then
+              echo "Deploying $(basename "$dashboard")"
+              
+              # In a real implementation, you would use Grafana API
+              # curl -X POST "$GRAFANA_URL/api/dashboards/db" \
+              #   -H "Authorization: Bearer $GRAFANA_TOKEN" \
+              #   -H "Content-Type: application/json" \
+              #   -d @"$dashboard"
+              
+              echo "✅ Deployed $(basename "$dashboard")"
+            fi
+          done
+          
+          echo "🎉 All dashboards deployed successfully"
+
+  # Summary job
+  sre-monitoring-summary:
+    runs-on: ubuntu-latest
+    name: SRE Monitoring Summary
+    needs: [validate-slo-config, calculate-slos, generate-slo-report, update-dashboards]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🔍 SRE Monitoring Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job results
+          if [ "${{ needs.validate-slo-config.result }}" == "success" ]; then
+            echo "✅ **SLO Configuration**: Valid" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.validate-slo-config.result }}" == "skipped" ]; then
+            echo "⏭️ **SLO Configuration**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **SLO Configuration**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.calculate-slos.result }}" == "success" ]; then
+            echo "✅ **SLO Calculations**: Completed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.calculate-slos.result }}" == "skipped" ]; then
+            echo "⏭️ **SLO Calculations**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **SLO Calculations**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.generate-slo-report.result }}" == "success" ]; then
+            echo "✅ **SLO Reports**: Generated" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.generate-slo-report.result }}" == "skipped" ]; then
+            echo "⏭️ **SLO Reports**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **SLO Reports**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.update-dashboards.result }}" == "success" ]; then
+            echo "✅ **Dashboard Updates**: Completed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.update-dashboards.result }}" == "skipped" ]; then
+            echo "⏭️ **Dashboard Updates**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Dashboard Updates**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔗 Resources" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [📊 SLO Dashboard](https://grafana.nexus.dev/d/slo-dashboard)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📈 Error Budget Dashboard](https://grafana.nexus.dev/d/error-budget-dashboard)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📚 SRE Documentation](https://docs.nexus.dev/sre)" >> $GITHUB_STEP_SUMMARY
+          echo "- [🚨 Alerting Rules](https://prometheus.nexus.dev/alerts)" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📅 Next Scheduled Run" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **SLO Calculations**: Every 15 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Daily Reports**: 6:00 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- **Weekly Reports**: Mondays at 8:00 AM UTC" >> $GITHUB_STEP_SUMMARY

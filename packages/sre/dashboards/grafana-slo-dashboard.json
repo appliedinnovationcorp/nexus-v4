@@ -1,0 +1,613 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Nexus SLO Dashboard",
+    "tags": ["slo", "sre", "reliability"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "version": 1,
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "service",
+          "type": "query",
+          "query": "label_values(http_requests_total, service)",
+          "refresh": 1,
+          "includeAll": true,
+          "allValue": ".*",
+          "multi": true,
+          "options": [],
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          }
+        },
+        {
+          "name": "time_window",
+          "type": "custom",
+          "options": [
+            {"text": "1 Hour", "value": "1h", "selected": false},
+            {"text": "6 Hours", "value": "6h", "selected": false},
+            {"text": "24 Hours", "value": "24h", "selected": false},
+            {"text": "7 Days", "value": "7d", "selected": false},
+            {"text": "30 Days", "value": "30d", "selected": true}
+          ],
+          "current": {
+            "text": "30 Days",
+            "value": "30d"
+          }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "SLO Compliance Overview",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "avg(slo_compliance_percentage{service=~\"$service\"})",
+            "legendFormat": "Overall Compliance",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            },
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Error Budget Status",
+        "type": "table",
+        "gridPos": {"h": 12, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "error_budget_remaining{service=~\"$service\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "expr": "error_budget_consumption_percentage{service=~\"$service\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "B"
+          },
+          {
+            "expr": "error_budget_burn_rate{service=~\"$service\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "C"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true,
+                "instance": true
+              },
+              "indexByName": {
+                "service": 0,
+                "slo_name": 1,
+                "Value #A": 2,
+                "Value #B": 3,
+                "Value #C": 4
+              },
+              "renameByName": {
+                "service": "Service",
+                "slo_name": "SLO",
+                "Value #A": "Budget Remaining",
+                "Value #B": "Budget Consumed (%)",
+                "Value #C": "Burn Rate"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Budget Consumed (%)"},
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "thresholds"
+                  }
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "steps": [
+                      {"color": "green", "value": 0},
+                      {"color": "yellow", "value": 50},
+                      {"color": "orange", "value": 75},
+                      {"color": "red", "value": 90}
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {"id": "byName", "options": "Burn Rate"},
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "thresholds"
+                  }
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "steps": [
+                      {"color": "green", "value": 0},
+                      {"color": "yellow", "value": 2},
+                      {"color": "orange", "value": 5},
+                      {"color": "red", "value": 10}
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active SLO Alerts",
+        "type": "table",
+        "gridPos": {"h": 12, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "ALERTS{alertname=~\".*SLO.*\", alertstate=\"firing\", service=~\"$service\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true,
+                "instance": true,
+                "Value": true
+              },
+              "indexByName": {
+                "alertname": 0,
+                "service": 1,
+                "severity": 2,
+                "alertstate": 3
+              },
+              "renameByName": {
+                "alertname": "Alert",
+                "service": "Service",
+                "severity": "Severity",
+                "alertstate": "State"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Severity"},
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-background"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {"options": {"critical": {"color": "red", "index": 0}}, "type": "value"},
+                    {"options": {"warning": {"color": "yellow", "index": 1}}, "type": "value"},
+                    {"options": {"info": {"color": "blue", "index": 2}}, "type": "value"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "API Availability SLO",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "(sum(rate(http_requests_total{service=\"nexus-api\",code!~\"5..\"}[$time_window])) / sum(rate(http_requests_total{service=\"nexus-api\"}[$time_window]))) * 100",
+            "legendFormat": "Actual SLI",
+            "refId": "A"
+          },
+          {
+            "expr": "99.9",
+            "legendFormat": "SLO Target (99.9%)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 99.9}
+              ]
+            },
+            "unit": "percent",
+            "min": 99,
+            "max": 100
+          }
+        },
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "API Latency SLO",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"nexus-api\"}[$time_window])) by (le)) * 1000",
+            "legendFormat": "P95 Latency (ms)",
+            "refId": "A"
+          },
+          {
+            "expr": "500",
+            "legendFormat": "SLO Target (500ms)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 500}
+              ]
+            },
+            "unit": "ms"
+          }
+        },
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Secret Management SLO",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "(sum(rate(secret_requests_total{service=\"secret-management\",status=\"success\"}[$time_window])) / sum(rate(secret_requests_total{service=\"secret-management\"}[$time_window]))) * 100",
+            "legendFormat": "Secret Retrieval Success Rate",
+            "refId": "A"
+          },
+          {
+            "expr": "99.95",
+            "legendFormat": "SLO Target (99.95%)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "red", "value": 99.95}
+              ]
+            },
+            "unit": "percent",
+            "min": 99,
+            "max": 100
+          }
+        },
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Error Budget Burn Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "targets": [
+          {
+            "expr": "error_budget_burn_rate{service=~\"$service\"}",
+            "legendFormat": "{{service}} - {{slo_name}}",
+            "refId": "A"
+          },
+          {
+            "expr": "1",
+            "legendFormat": "Sustainable Rate (1x)",
+            "refId": "B"
+          },
+          {
+            "expr": "14.4",
+            "legendFormat": "Fast Burn Threshold (14.4x)",
+            "refId": "C"
+          },
+          {
+            "expr": "6",
+            "legendFormat": "Slow Burn Threshold (6x)",
+            "refId": "D"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 6},
+                {"color": "red", "value": 14.4}
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom"
+          },
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          }
+        }
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "prometheus",
+          "enable": true,
+          "expr": "changes(deployment_timestamp[1m]) > 0",
+          "iconColor": "blue",
+          "titleFormat": "Deployment: {{service}}",
+          "textFormat": "{{version}}"
+        },
+        {
+          "name": "Incidents",
+          "datasource": "prometheus",
+          "enable": true,
+          "expr": "incident_start_timestamp",
+          "iconColor": "red",
+          "titleFormat": "Incident: {{title}}",
+          "textFormat": "{{description}}"
+        }
+      ]
+    }
+  }
+}

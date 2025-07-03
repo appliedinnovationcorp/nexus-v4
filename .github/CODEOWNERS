@@ -130,3 +130,16 @@ packages/ui/chromatic.config.json @nexus-team/frontend-team @nexus-team/qa-team
 packages/ui/README.md @nexus-team/design-team @nexus-team/frontend-team
 packages/ui/**/*.stories.tsx @nexus-team/design-team @nexus-team/frontend-team
 packages/ui/**/*.mdx @nexus-team/design-team @nexus-team/frontend-team
+
+# Site Reliability Engineering (SRE)
+packages/sre/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/configs/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/dashboards/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/src/types/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/src/core/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/src/monitoring/ @nexus-team/sre-team @nexus-team/platform-team
+packages/sre/scripts/ @nexus-team/sre-team @nexus-team/platform-team
+.github/workflows/sre-monitoring.yml @nexus-team/sre-team @nexus-team/platform-team
+
+# SLO Configuration (Critical)
+packages/sre/configs/slo-definitions.yaml @nexus-team/sre-team @nexus-team/platform-team @nexus-team/security-team

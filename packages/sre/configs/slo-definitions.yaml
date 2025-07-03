@@ -1,0 +1,457 @@
+version: "1.0"
+
+global:
+  defaultTimeWindow: "30d"
+  monitoringBackend: "prometheus"
+  dashboards:
+    autoGenerate: true
+    platform: "grafana"
+    refreshInterval: "30s"
+  defaultAlerting:
+    burnRate:
+      fast:
+        threshold: 14.4  # 2% of 30d budget in 1h
+        window: "1h"
+        severity: "critical"
+      slow:
+        threshold: 6     # 5% of 30d budget in 6h
+        window: "6h"
+        severity: "warning"
+    budgetExhaustion:
+      thresholds:
+        - percentage: 50
+          severity: "info"
+        - percentage: 75
+          severity: "warning"
+        - percentage: 90
+          severity: "critical"
+
+services:
+  - name: "nexus-api"
+    tier: "tier-0"
+    description: "Core API service handling user requests"
+    owner: "backend-team"
+    dependencies: ["nexus-database", "nexus-cache", "secret-management"]
+    slos:
+      - id: "nexus-api-availability"
+        name: "API Availability"
+        description: "Percentage of successful API requests"
+        service: "nexus-api"
+        tier: "tier-0"
+        sli:
+          id: "api-success-rate"
+          name: "API Success Rate"
+          description: "Ratio of successful HTTP responses (2xx, 3xx) to total requests"
+          type: "availability"
+          query: |
+            (
+              sum(rate(http_requests_total{service="nexus-api",code!~"5.."}[5m])) /
+              sum(rate(http_requests_total{service="nexus-api"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["http", "api", "availability"]
+        target: 99.9
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 14.4
+              window: "1h"
+              severity: "critical"
+            slow:
+              threshold: 6
+              window: "6h"
+              severity: "warning"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 50
+                severity: "info"
+              - percentage: 75
+                severity: "warning"
+              - percentage: 90
+                severity: "critical"
+        metadata:
+          owner: "backend-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/api-availability"
+          runbook: "https://runbooks.nexus.dev/api-availability"
+          tags: ["critical", "user-facing", "api"]
+
+      - id: "nexus-api-latency"
+        name: "API Response Time"
+        description: "95th percentile response time for API requests"
+        service: "nexus-api"
+        tier: "tier-0"
+        sli:
+          id: "api-p95-latency"
+          name: "API P95 Latency"
+          description: "95th percentile of HTTP request duration"
+          type: "latency"
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{service="nexus-api"}[5m])) by (le)
+            ) * 1000
+          queryLanguage: "prometheus"
+          unit: "milliseconds"
+          tags: ["http", "api", "latency", "performance"]
+        target: 95  # 95% of requests under target latency
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 14.4
+              window: "1h"
+              severity: "critical"
+            slow:
+              threshold: 6
+              window: "6h"
+              severity: "warning"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 75
+                severity: "warning"
+              - percentage: 90
+                severity: "critical"
+        metadata:
+          owner: "backend-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/api-latency"
+          runbook: "https://runbooks.nexus.dev/api-latency"
+          tags: ["performance", "user-experience", "api"]
+
+  - name: "nexus-database"
+    tier: "tier-1"
+    description: "Primary database service"
+    owner: "platform-team"
+    dependencies: ["nexus-storage"]
+    slos:
+      - id: "nexus-db-availability"
+        name: "Database Availability"
+        description: "Database connection success rate"
+        service: "nexus-database"
+        tier: "tier-1"
+        sli:
+          id: "db-connection-success"
+          name: "Database Connection Success Rate"
+          description: "Ratio of successful database connections to total attempts"
+          type: "availability"
+          query: |
+            (
+              sum(rate(db_connections_total{service="nexus-database",status="success"}[5m])) /
+              sum(rate(db_connections_total{service="nexus-database"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["database", "connection", "availability"]
+        target: 99.95
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 14.4
+              window: "1h"
+              severity: "critical"
+            slow:
+              threshold: 6
+              window: "6h"
+              severity: "warning"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 50
+                severity: "info"
+              - percentage: 75
+                severity: "warning"
+              - percentage: 90
+                severity: "critical"
+        metadata:
+          owner: "platform-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/db-availability"
+          runbook: "https://runbooks.nexus.dev/db-availability"
+          tags: ["critical", "infrastructure", "database"]
+
+      - id: "nexus-db-query-performance"
+        name: "Database Query Performance"
+        description: "95th percentile query execution time"
+        service: "nexus-database"
+        tier: "tier-1"
+        sli:
+          id: "db-query-p95-latency"
+          name: "Database Query P95 Latency"
+          description: "95th percentile of database query execution time"
+          type: "latency"
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(db_query_duration_seconds_bucket{service="nexus-database"}[5m])) by (le)
+            ) * 1000
+          queryLanguage: "prometheus"
+          unit: "milliseconds"
+          tags: ["database", "query", "latency", "performance"]
+        target: 90  # 90% of queries under target latency
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 10
+              window: "1h"
+              severity: "warning"
+            slow:
+              threshold: 5
+              window: "6h"
+              severity: "info"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 75
+                severity: "warning"
+              - percentage: 90
+                severity: "critical"
+        metadata:
+          owner: "platform-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/db-performance"
+          runbook: "https://runbooks.nexus.dev/db-performance"
+          tags: ["performance", "database", "queries"]
+
+  - name: "secret-management"
+    tier: "tier-0"
+    description: "Secret management service using HashiCorp Vault"
+    owner: "security-team"
+    dependencies: ["vault-cluster", "nexus-database"]
+    slos:
+      - id: "secret-mgmt-availability"
+        name: "Secret Management Availability"
+        description: "Secret retrieval success rate"
+        service: "secret-management"
+        tier: "tier-0"
+        sli:
+          id: "secret-retrieval-success"
+          name: "Secret Retrieval Success Rate"
+          description: "Ratio of successful secret retrievals to total requests"
+          type: "availability"
+          query: |
+            (
+              sum(rate(secret_requests_total{service="secret-management",status="success"}[5m])) /
+              sum(rate(secret_requests_total{service="secret-management"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["security", "secrets", "availability"]
+        target: 99.95
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 14.4
+              window: "1h"
+              severity: "critical"
+            slow:
+              threshold: 6
+              window: "6h"
+              severity: "warning"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 25
+                severity: "info"
+              - percentage: 50
+                severity: "warning"
+              - percentage: 75
+                severity: "critical"
+        metadata:
+          owner: "security-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/secret-management"
+          runbook: "https://runbooks.nexus.dev/secret-management"
+          tags: ["critical", "security", "secrets"]
+
+      - id: "secret-mgmt-latency"
+        name: "Secret Retrieval Latency"
+        description: "95th percentile secret retrieval time"
+        service: "secret-management"
+        tier: "tier-0"
+        sli:
+          id: "secret-retrieval-p95-latency"
+          name: "Secret Retrieval P95 Latency"
+          description: "95th percentile of secret retrieval duration"
+          type: "latency"
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(secret_request_duration_seconds_bucket{service="secret-management"}[5m])) by (le)
+            ) * 1000
+          queryLanguage: "prometheus"
+          unit: "milliseconds"
+          tags: ["security", "secrets", "latency", "performance"]
+        target: 98  # 98% of requests under target latency
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 14.4
+              window: "1h"
+              severity: "critical"
+            slow:
+              threshold: 6
+              window: "6h"
+              severity: "warning"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 50
+                severity: "warning"
+              - percentage: 75
+                severity: "critical"
+        metadata:
+          owner: "security-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/secret-latency"
+          runbook: "https://runbooks.nexus.dev/secret-latency"
+          tags: ["performance", "security", "secrets"]
+
+  - name: "nexus-frontend"
+    tier: "tier-1"
+    description: "Frontend application and static assets"
+    owner: "frontend-team"
+    dependencies: ["nexus-api", "cdn"]
+    slos:
+      - id: "frontend-availability"
+        name: "Frontend Availability"
+        description: "Frontend application availability"
+        service: "nexus-frontend"
+        tier: "tier-1"
+        sli:
+          id: "frontend-uptime"
+          name: "Frontend Uptime"
+          description: "Percentage of time frontend is accessible"
+          type: "availability"
+          query: |
+            (
+              sum(rate(http_requests_total{service="nexus-frontend",code!~"5.."}[5m])) /
+              sum(rate(http_requests_total{service="nexus-frontend"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["frontend", "web", "availability"]
+        target: 99.5
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 10
+              window: "1h"
+              severity: "warning"
+            slow:
+              threshold: 5
+              window: "6h"
+              severity: "info"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 75
+                severity: "warning"
+              - percentage: 90
+                severity: "critical"
+        metadata:
+          owner: "frontend-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/frontend-availability"
+          runbook: "https://runbooks.nexus.dev/frontend-availability"
+          tags: ["user-facing", "frontend", "web"]
+
+      - id: "frontend-core-web-vitals"
+        name: "Core Web Vitals"
+        description: "Largest Contentful Paint performance"
+        service: "nexus-frontend"
+        tier: "tier-1"
+        sli:
+          id: "lcp-performance"
+          name: "LCP Performance"
+          description: "Percentage of page loads with LCP under 2.5s"
+          type: "quality"
+          query: |
+            (
+              sum(rate(web_vitals_lcp_bucket{service="nexus-frontend",le="2.5"}[5m])) /
+              sum(rate(web_vitals_lcp_bucket{service="nexus-frontend"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["frontend", "performance", "web-vitals", "user-experience"]
+        target: 75  # 75% of page loads meet LCP threshold
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 8
+              window: "1h"
+              severity: "warning"
+            slow:
+              threshold: 4
+              window: "6h"
+              severity: "info"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 80
+                severity: "warning"
+              - percentage: 95
+                severity: "critical"
+        metadata:
+          owner: "frontend-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/core-web-vitals"
+          runbook: "https://runbooks.nexus.dev/core-web-vitals"
+          tags: ["performance", "user-experience", "web-vitals"]
+
+  - name: "design-system"
+    tier: "tier-2"
+    description: "Design system and component library"
+    owner: "design-team"
+    dependencies: ["cdn", "storybook"]
+    slos:
+      - id: "design-system-availability"
+        name: "Design System Availability"
+        description: "Storybook and component library availability"
+        service: "design-system"
+        tier: "tier-2"
+        sli:
+          id: "storybook-uptime"
+          name: "Storybook Uptime"
+          description: "Percentage of time Storybook is accessible"
+          type: "availability"
+          query: |
+            (
+              sum(rate(http_requests_total{service="storybook",code!~"5.."}[5m])) /
+              sum(rate(http_requests_total{service="storybook"}[5m]))
+            ) * 100
+          queryLanguage: "prometheus"
+          unit: "percent"
+          tags: ["design-system", "storybook", "availability"]
+        target: 99.0
+        timeWindow: "30d"
+        alerting:
+          burnRate:
+            fast:
+              threshold: 6
+              window: "1h"
+              severity: "warning"
+            slow:
+              threshold: 3
+              window: "6h"
+              severity: "info"
+          budgetExhaustion:
+            thresholds:
+              - percentage: 80
+                severity: "warning"
+              - percentage: 95
+                severity: "critical"
+        metadata:
+          owner: "design-team"
+          createdAt: "2024-01-01T00:00:00Z"
+          updatedAt: "2024-01-01T00:00:00Z"
+          documentation: "https://docs.nexus.dev/slo/design-system"
+          runbook: "https://runbooks.nexus.dev/design-system"
+          tags: ["design-system", "documentation", "components"]
