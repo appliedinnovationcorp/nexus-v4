@@ -1,0 +1,529 @@
+name: Design System CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'packages/ui/**'
+      - '.github/workflows/design-system-ci.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'packages/ui/**'
+      - '.github/workflows/design-system-ci.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  statuses: write
+
+jobs:
+  # Build and test the design system
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: Build & Test Design System
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build design tokens
+        run: |
+          cd packages/ui
+          pnpm run build:tokens
+
+      - name: Type check
+        run: |
+          cd packages/ui
+          pnpm run type-check
+
+      - name: Lint code
+        run: |
+          cd packages/ui
+          pnpm run lint
+
+      - name: Run tests
+        run: |
+          cd packages/ui
+          pnpm run test:coverage
+
+      - name: Build package
+        run: |
+          cd packages/ui
+          pnpm run build
+
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: packages/ui/coverage/lcov.info
+          flags: ui-components
+          name: UI Components Coverage
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-build-${{ github.sha }}
+          path: |
+            packages/ui/dist/
+            packages/ui/tokens/
+          retention-days: 7
+
+  # Build Storybook
+  build-storybook:
+    runs-on: ubuntu-latest
+    name: Build Storybook
+    needs: build-and-test
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build design tokens
+        run: |
+          cd packages/ui
+          pnpm run build:tokens
+
+      - name: Build Storybook
+        run: |
+          cd packages/ui
+          pnpm run build-storybook
+
+      - name: Upload Storybook build
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook-build-${{ github.sha }}
+          path: packages/ui/storybook-static/
+          retention-days: 7
+
+  # Visual regression testing with Chromatic
+  visual-regression-test:
+    runs-on: ubuntu-latest
+    name: Visual Regression Testing
+    needs: build-storybook
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build design tokens
+        run: |
+          cd packages/ui
+          pnpm run build:tokens
+
+      - name: Run Chromatic
+        uses: chromaui/action@v1
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: packages/ui
+          buildScriptName: build-storybook
+          exitZeroOnChanges: true
+          exitOnceUploaded: true
+          onlyChanged: true
+          externals: |
+            - public/**
+            - assets/**
+          skip: 'dependabot/**'
+          autoAcceptChanges: ${{ github.ref == 'refs/heads/main' }}
+
+  # Accessibility testing
+  accessibility-test:
+    runs-on: ubuntu-latest
+    name: Accessibility Testing
+    needs: build-storybook
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: |
+          cd packages/ui
+          npx playwright install --with-deps
+
+      - name: Build design tokens
+        run: |
+          cd packages/ui
+          pnpm run build:tokens
+
+      - name: Build Storybook
+        run: |
+          cd packages/ui
+          pnpm run build-storybook
+
+      - name: Serve Storybook and run tests
+        run: |
+          cd packages/ui
+          npx concurrently -k -s first -n "SB,TEST" -c "magenta,blue" \
+            "npx http-server storybook-static --port 6006 --silent" \
+            "npx wait-on http://127.0.0.1:6006 && pnpm run storybook:test"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessibility-test-results-${{ github.sha }}
+          path: packages/ui/test-results/
+          retention-days: 7
+
+  # Design token validation
+  design-token-validation:
+    runs-on: ubuntu-latest
+    name: Design Token Validation
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate design tokens
+        run: |
+          cd packages/ui
+          
+          echo "=== Validating Design Token Structure ==="
+          
+          # Check if all required token files exist
+          required_files=("color.json" "typography.json" "spacing.json" "motion.json")
+          for file in "${required_files[@]}"; do
+            if [ ! -f "tokens/$file" ]; then
+              echo "❌ Missing required token file: $file"
+              exit 1
+            else
+              echo "✅ Found token file: $file"
+            fi
+          done
+          
+          # Validate JSON syntax
+          echo ""
+          echo "=== Validating JSON Syntax ==="
+          for file in tokens/*.json; do
+            if jq empty "$file" 2>/dev/null; then
+              echo "✅ Valid JSON: $(basename "$file")"
+            else
+              echo "❌ Invalid JSON: $(basename "$file")"
+              exit 1
+            fi
+          done
+          
+          # Build tokens to ensure they compile
+          echo ""
+          echo "=== Building Design Tokens ==="
+          pnpm run build:tokens
+          
+          # Check if output files were generated
+          if [ -f "tokens/index.js" ] && [ -f "tokens/index.d.ts" ]; then
+            echo "✅ Design tokens built successfully"
+          else
+            echo "❌ Design token build failed"
+            exit 1
+          fi
+          
+          echo ""
+          echo "🎉 All design token validations passed!"
+
+  # Component documentation check
+  documentation-check:
+    runs-on: ubuntu-latest
+    name: Documentation Check
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check component documentation
+        run: |
+          cd packages/ui
+          
+          echo "=== Checking Component Documentation ==="
+          
+          # Find all component files
+          component_files=$(find src/components -name "*.tsx" -not -name "*.stories.tsx" -not -name "*.test.tsx")
+          missing_stories=()
+          
+          for component_file in $component_files; do
+            component_dir=$(dirname "$component_file")
+            component_name=$(basename "$component_file" .tsx)
+            story_file="${component_dir}/${component_name}.stories.tsx"
+            
+            if [ ! -f "$story_file" ]; then
+              missing_stories+=("$component_file")
+              echo "❌ Missing story file for: $component_file"
+            else
+              echo "✅ Story file exists for: $component_file"
+            fi
+          done
+          
+          if [ ${#missing_stories[@]} -eq 0 ]; then
+            echo ""
+            echo "🎉 All components have corresponding story files!"
+          else
+            echo ""
+            echo "❌ Found ${#missing_stories[@]} components without story files"
+            exit 1
+          fi
+
+  # Package size analysis
+  bundle-size-analysis:
+    runs-on: ubuntu-latest
+    name: Bundle Size Analysis
+    needs: build-and-test
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-build-${{ github.sha }}
+          path: packages/ui/
+
+      - name: Analyze bundle size
+        run: |
+          cd packages/ui
+          
+          echo "=== Bundle Size Analysis ==="
+          
+          if [ -d "dist" ]; then
+            echo "📦 Package build size:"
+            du -sh dist/
+            echo ""
+            
+            echo "📄 Individual file sizes:"
+            find dist -name "*.js" -o -name "*.css" | while read file; do
+              size=$(du -h "$file" | cut -f1)
+              echo "  $size - $(basename "$file")"
+            done
+            
+            echo ""
+            echo "🎯 Gzipped sizes:"
+            find dist -name "*.js" -o -name "*.css" | while read file; do
+              gzipped_size=$(gzip -c "$file" | wc -c | awk '{print int($1/1024)"K"}')
+              echo "  $gzipped_size - $(basename "$file") (gzipped)"
+            done
+          else
+            echo "❌ Build directory not found"
+            exit 1
+          fi
+
+  # Deployment to Storybook (main branch only)
+  deploy-storybook:
+    runs-on: ubuntu-latest
+    name: Deploy Storybook
+    needs: [build-storybook, visual-regression-test, accessibility-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Storybook build
+        uses: actions/download-artifact@v4
+        with:
+          name: storybook-build-${{ github.sha }}
+          path: packages/ui/storybook-static/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: packages/ui/storybook-static
+          destination_dir: storybook
+          cname: nexus-ui.dev
+
+  # Summary job
+  design-system-summary:
+    runs-on: ubuntu-latest
+    name: Design System Summary
+    needs: [
+      build-and-test,
+      build-storybook,
+      visual-regression-test,
+      accessibility-test,
+      design-token-validation,
+      documentation-check,
+      bundle-size-analysis
+    ]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🎨 Design System CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check job results
+          if [ "${{ needs.build-and-test.result }}" == "success" ]; then
+            echo "✅ **Build & Test**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build & Test**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-storybook.result }}" == "success" ]; then
+            echo "✅ **Storybook Build**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Storybook Build**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.visual-regression-test.result }}" == "success" ]; then
+            echo "✅ **Visual Regression**: Passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.visual-regression-test.result }}" == "skipped" ]; then
+            echo "⏭️ **Visual Regression**: Skipped" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Visual Regression**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.accessibility-test.result }}" == "success" ]; then
+            echo "✅ **Accessibility**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Accessibility**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.design-token-validation.result }}" == "success" ]; then
+            echo "✅ **Design Tokens**: Valid" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Design Tokens**: Invalid" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.documentation-check.result }}" == "success" ]; then
+            echo "✅ **Documentation**: Complete" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Documentation**: Incomplete" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.bundle-size-analysis.result }}" == "success" ]; then
+            echo "✅ **Bundle Analysis**: Complete" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Bundle Analysis**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [📚 Storybook Documentation](https://nexus-ui.dev/storybook)" >> $GITHUB_STEP_SUMMARY
+          echo "- [🎨 Chromatic Visual Tests](https://www.chromatic.com)" >> $GITHUB_STEP_SUMMARY
+          echo "- [📊 Bundle Analysis](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

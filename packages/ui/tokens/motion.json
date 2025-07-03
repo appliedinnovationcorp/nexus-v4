@@ -1,0 +1,42 @@
+{
+  "motion": {
+    "duration": {
+      "instant": { "value": "0ms" },
+      "fast": { "value": "150ms" },
+      "normal": { "value": "300ms" },
+      "slow": { "value": "500ms" },
+      "slower": { "value": "750ms" },
+      "slowest": { "value": "1000ms" }
+    },
+    "easing": {
+      "linear": { "value": "linear" },
+      "ease": { "value": "ease" },
+      "ease-in": { "value": "ease-in" },
+      "ease-out": { "value": "ease-out" },
+      "ease-in-out": { "value": "ease-in-out" },
+      "bounce": { "value": "cubic-bezier(0.68, -0.55, 0.265, 1.55)" },
+      "smooth": { "value": "cubic-bezier(0.4, 0, 0.2, 1)" },
+      "sharp": { "value": "cubic-bezier(0.4, 0, 0.6, 1)" }
+    },
+    "transition": {
+      "all": {
+        "fast": { "value": "all {motion.duration.fast.value} {motion.easing.smooth.value}" },
+        "normal": { "value": "all {motion.duration.normal.value} {motion.easing.smooth.value}" },
+        "slow": { "value": "all {motion.duration.slow.value} {motion.easing.smooth.value}" }
+      },
+      "colors": {
+        "fast": { "value": "color {motion.duration.fast.value} {motion.easing.smooth.value}, background-color {motion.duration.fast.value} {motion.easing.smooth.value}, border-color {motion.duration.fast.value} {motion.easing.smooth.value}" },
+        "normal": { "value": "color {motion.duration.normal.value} {motion.easing.smooth.value}, background-color {motion.duration.normal.value} {motion.easing.smooth.value}, border-color {motion.duration.normal.value} {motion.easing.smooth.value}" }
+      },
+      "transform": {
+        "fast": { "value": "transform {motion.duration.fast.value} {motion.easing.smooth.value}" },
+        "normal": { "value": "transform {motion.duration.normal.value} {motion.easing.smooth.value}" },
+        "bounce": { "value": "transform {motion.duration.normal.value} {motion.easing.bounce.value}" }
+      },
+      "opacity": {
+        "fast": { "value": "opacity {motion.duration.fast.value} {motion.easing.smooth.value}" },
+        "normal": { "value": "opacity {motion.duration.normal.value} {motion.easing.smooth.value}" }
+      }
+    }
+  }
+}

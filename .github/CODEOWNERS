@@ -117,3 +117,16 @@ TERMS.md @nexus-team/legal-team
 # Release & Deployment
 CHANGELOG.md @nexus-team/platform-team @nexus-team/product-team
 /scripts/deploy-*.sh @nexus-team/platform-team @nexus-team/devops-team @nexus-team/security-team
+
+# Design System & UI Components
+packages/ui/ @nexus-team/frontend-team @nexus-team/design-team
+packages/ui/src/components/ @nexus-team/frontend-team @nexus-team/design-team
+packages/ui/tokens/ @nexus-team/design-team @nexus-team/platform-team
+packages/ui/.storybook/ @nexus-team/frontend-team @nexus-team/design-team
+packages/ui/chromatic.config.json @nexus-team/frontend-team @nexus-team/qa-team
+.github/workflows/design-system-ci.yml @nexus-team/platform-team @nexus-team/frontend-team
+
+# Design System Documentation
+packages/ui/README.md @nexus-team/design-team @nexus-team/frontend-team
+packages/ui/**/*.stories.tsx @nexus-team/design-team @nexus-team/frontend-team
+packages/ui/**/*.mdx @nexus-team/design-team @nexus-team/frontend-team

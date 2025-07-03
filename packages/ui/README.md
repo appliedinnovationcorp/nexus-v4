@@ -1,290 +1,443 @@
-# @nexus/ui
+# @nexus/ui - Nexus Design System
 
-Shared UI components library for the Nexus workspace. Built with React,
-TypeScript, and Tailwind CSS.
+A comprehensive, accessible, and well-documented design system built with React, TypeScript, and Tailwind CSS. Features design tokens, Storybook documentation, and visual regression testing with Chromatic.
 
-## Features
+## 🎨 Features
 
-- 🎨 **Modern Design System** - Consistent, accessible components
-- 🔧 **TypeScript First** - Full type safety and IntelliSense support
-- 📱 **Responsive** - Mobile-first design approach
-- ♿ **Accessible** - WCAG compliant components
-- 🎯 **Tree Shakeable** - Import only what you need
-- 🔄 **SSR Ready** - Works with Next.js and other SSR frameworks
+- **Design Tokens**: Centralized design decisions with Style Dictionary
+- **Component Library**: Accessible React components built with Radix UI
+- **Storybook Documentation**: Interactive component documentation
+- **Visual Regression Testing**: Automated UI testing with Chromatic
+- **Accessibility First**: WCAG 2.1 AA compliant components
+- **TypeScript Support**: Full type safety and IntelliSense
+- **Tailwind CSS**: Utility-first styling with custom design tokens
+- **Tree Shaking**: Optimized bundle size with selective imports
 
-## Installation
-
-This package is part of the Nexus workspace and is automatically available to
-all workspace projects.
-
-For external projects:
+## 📦 Installation
 
 ```bash
 npm install @nexus/ui
 # or
-pnpm add @nexus/ui
-# or
 yarn add @nexus/ui
+# or
+pnpm add @nexus/ui
 ```
 
-## Usage
+## 🚀 Quick Start
 
 ```tsx
-import { Button } from '@nexus/ui';
+import { Button, Input } from '@nexus/ui';
+import '@nexus/ui/styles';
 
 function App() {
   return (
-    <Button variant="primary" size="md" onClick={() => console.log('Clicked!')}>
-      Click me
-    </Button>
+    <div>
+      <Input 
+        label="Email" 
+        type="email" 
+        placeholder="Enter your email" 
+      />
+      <Button variant="primary" size="lg">
+        Get Started
+      </Button>
+    </div>
   );
 }
 ```
 
-## Components
+## 🎯 Design Tokens
+
+The design system uses a token-based approach for consistent styling:
+
+```tsx
+import { tokens } from '@nexus/ui/tokens';
+
+// Use design tokens directly
+const customStyles = {
+  color: tokens.colorPrimary500,
+  fontSize: tokens.typographySizeBase,
+  spacing: tokens.spacing4,
+};
+```
+
+### Token Categories
+
+- **Colors**: Primary, secondary, semantic colors with full palettes
+- **Typography**: Font families, sizes, weights, and line heights
+- **Spacing**: Consistent spacing scale for margins, padding, and gaps
+- **Motion**: Animation durations, easing functions, and transitions
+
+## 📚 Components
 
 ### Button
 
-A versatile button component with multiple variants, sizes, and states.
-
-#### Props
-
-| Prop        | Type                                                                | Default     | Description                |
-| ----------- | ------------------------------------------------------------------- | ----------- | -------------------------- |
-| `variant`   | `'primary' \| 'secondary' \| 'outline' \| 'ghost' \| 'destructive'` | `'primary'` | Visual style variant       |
-| `size`      | `'sm' \| 'md' \| 'lg'`                                              | `'md'`      | Button size                |
-| `loading`   | `boolean`                                                           | `false`     | Loading state with spinner |
-| `fullWidth` | `boolean`                                                           | `false`     | Full width button          |
-| `leftIcon`  | `ReactNode`                                                         | -           | Icon before text           |
-| `rightIcon` | `ReactNode`                                                         | -           | Icon after text            |
-| `disabled`  | `boolean`                                                           | `false`     | Disabled state             |
-| `children`  | `ReactNode`                                                         | -           | Button content             |
-
-#### Examples
-
-**Basic Usage**
+Versatile button component with multiple variants and states.
 
 ```tsx
-<Button>Default Button</Button>
+<Button variant="primary" size="lg" loading>
+  Loading...
+</Button>
+
+<Button variant="outline" leftIcon={<PlusIcon />}>
+  Add Item
+</Button>
 ```
 
-**Variants**
+**Props:**
+- `variant`: `default` | `destructive` | `outline` | `secondary` | `ghost` | `link`
+- `size`: `sm` | `default` | `lg` | `xl` | `icon`
+- `loading`: boolean
+- `leftIcon`, `rightIcon`: React.ReactNode
+- `fullWidth`: boolean
+
+### Input
+
+Flexible input component with validation states and icons.
 
 ```tsx
-<Button variant="primary">Primary</Button>
-<Button variant="secondary">Secondary</Button>
-<Button variant="outline">Outline</Button>
-<Button variant="ghost">Ghost</Button>
-<Button variant="destructive">Destructive</Button>
+<Input
+  label="Email Address"
+  type="email"
+  placeholder="Enter your email"
+  error="Please enter a valid email"
+  startIcon={<MailIcon />}
+/>
 ```
 
-**Sizes**
+**Props:**
+- `variant`: `default` | `filled` | `flushed`
+- `size`: `sm` | `default` | `lg`
+- `state`: `default` | `error` | `success` | `warning`
+- `label`, `helperText`, `error`: string
+- `startIcon`, `endIcon`: React.ReactNode
+- `loading`: boolean
 
-```tsx
-<Button size="sm">Small</Button>
-<Button size="md">Medium</Button>
-<Button size="lg">Large</Button>
+## 🎨 Storybook
+
+Explore all components interactively in Storybook:
+
+```bash
+cd packages/ui
+pnpm storybook
 ```
 
-**With Icons**
+Visit [https://nexus-ui.dev/storybook](https://nexus-ui.dev/storybook) for the live documentation.
 
-```tsx
-<Button leftIcon={<PlusIcon />}>Add Item</Button>
-<Button rightIcon={<ArrowRightIcon />}>Continue</Button>
+## 🧪 Testing
+
+### Unit Tests
+
+```bash
+pnpm test
+pnpm test:watch
+pnpm test:coverage
 ```
 
-**Loading State**
+### Visual Regression Testing
 
-```tsx
-<Button loading>Loading...</Button>
+```bash
+pnpm chromatic
 ```
 
-**Full Width**
+### Accessibility Testing
 
-```tsx
-<Button fullWidth>Full Width Button</Button>
+```bash
+pnpm storybook:test
 ```
 
-**Custom Styling**
+## 🛠️ Development
 
-```tsx
-<Button className="custom-class">Custom Button</Button>
+### Setup
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build design tokens
+pnpm build:tokens
+
+# Start development
+pnpm dev
+
+# Start Storybook
+pnpm storybook
 ```
-
-## Styling
-
-This package uses Tailwind CSS for styling. Make sure your project has Tailwind
-CSS configured.
-
-### Required Tailwind Classes
-
-The components use the following Tailwind classes:
-
-- Layout: `inline-flex`, `items-center`, `justify-center`, `gap-2`, `w-full`
-- Typography: `font-medium`, `text-sm`, `text-base`, `text-lg`
-- Spacing: `px-3`, `py-1.5`, `px-4`, `py-2`, `px-6`, `py-3`
-- Colors: `bg-*`, `text-*`, `border-*`, `hover:*`, `focus:*`, `active:*`
-- Border: `rounded-md`, `border`
-- Effects: `transition-all`, `duration-200`, `animate-spin`
-- States: `disabled:*`, `focus:*`, `hover:*`
-
-### Customization
-
-You can customize the appearance by:
-
-1. **Overriding with className**
-
-```tsx
-<Button className="bg-purple-600 hover:bg-purple-700">Custom Color</Button>
-```
-
-2. **Extending the component**
-
-```tsx
-const CustomButton = ({ children, ...props }) => (
-  <Button className="my-custom-styles" {...props}>
-    {children}
-  </Button>
-);
-```
-
-3. **Creating new variants** (modify the source)
-
-## Accessibility
-
-All components follow WCAG 2.1 guidelines:
-
-- **Keyboard Navigation**: Full keyboard support
-- **Screen Readers**: Proper ARIA labels and roles
-- **Focus Management**: Visible focus indicators
-- **Color Contrast**: Meets AA standards
-- **Semantic HTML**: Proper HTML elements
-
-### Button Accessibility Features
-
-- Uses semantic `<button>` element
-- Proper `disabled` and `aria-disabled` attributes
-- Loading state communicated to screen readers
-- Focus ring for keyboard navigation
-- Appropriate color contrast ratios
-
-## Development
 
 ### Building
 
 ```bash
+# Build everything
 pnpm build
+
+# Build tokens only
+pnpm build:tokens
+
+# Build Storybook
+pnpm build-storybook
 ```
 
-### Development Mode
+### Design Token Development
+
+Design tokens are defined in JSON files under `tokens/`:
+
+```json
+{
+  "color": {
+    "primary": {
+      "500": { "value": "#3b82f6" }
+    }
+  }
+}
+```
+
+Build tokens with:
 
 ```bash
-pnpm dev
+pnpm build:tokens
 ```
 
-### Linting
+This generates:
+- CSS custom properties (`dist/tokens/variables.css`)
+- JavaScript/TypeScript exports (`tokens/index.js`, `tokens/index.d.ts`)
+- JSON output (`dist/tokens/tokens.json`)
+
+## 📖 Documentation
+
+### Component Stories
+
+Each component should have a corresponding `.stories.tsx` file:
+
+```tsx
+import type { Meta, StoryObj } from '@storybook/react';
+import { Button } from './Button';
+
+const meta: Meta<typeof Button> = {
+  title: 'Components/Button',
+  component: Button,
+  parameters: {
+    docs: {
+      description: {
+        component: 'A versatile button component...',
+      },
+    },
+  },
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['default', 'destructive', 'outline'],
+    },
+  },
+  tags: ['autodocs'],
+};
+
+export default meta;
+type Story = StoryObj<typeof Button>;
+
+export const Default: Story = {
+  args: {
+    children: 'Button',
+  },
+};
+```
+
+### Writing Documentation
+
+- Use JSDoc comments for component props
+- Include usage examples in stories
+- Document accessibility features
+- Provide interactive examples
+
+## ♿ Accessibility
+
+All components are built with accessibility in mind:
+
+- **Keyboard Navigation**: Full keyboard support
+- **Screen Readers**: Proper ARIA attributes and semantic HTML
+- **Focus Management**: Visible focus indicators and logical tab order
+- **Color Contrast**: WCAG 2.1 AA compliant color combinations
+- **Motion**: Respects `prefers-reduced-motion`
+
+### Testing Accessibility
 
 ```bash
-pnpm lint
-pnpm lint:fix
+# Run accessibility tests
+pnpm storybook:test
+
+# Manual testing with screen readers
+# - macOS: VoiceOver (Cmd + F5)
+# - Windows: NVDA or JAWS
+# - Linux: Orca
 ```
 
-### Formatting
+## 🎯 Best Practices
+
+### Component Development
+
+1. **Start with Accessibility**: Design for keyboard and screen reader users
+2. **Use Design Tokens**: Reference tokens instead of hardcoded values
+3. **Write Stories**: Document all component variants and states
+4. **Test Thoroughly**: Unit tests, visual tests, and accessibility tests
+5. **Follow Conventions**: Use consistent naming and file structure
+
+### Design Token Usage
+
+```tsx
+// ✅ Good - Use design tokens
+const styles = {
+  color: 'hsl(var(--primary))',
+  fontSize: 'var(--text-base)',
+  padding: 'var(--spacing-4)',
+};
+
+// ❌ Avoid - Hardcoded values
+const styles = {
+  color: '#3b82f6',
+  fontSize: '16px',
+  padding: '16px',
+};
+```
+
+### Component API Design
+
+```tsx
+// ✅ Good - Flexible and consistent
+interface ButtonProps {
+  variant?: 'default' | 'outline' | 'ghost';
+  size?: 'sm' | 'default' | 'lg';
+  loading?: boolean;
+  children: React.ReactNode;
+}
+
+// ❌ Avoid - Too many boolean props
+interface ButtonProps {
+  isPrimary?: boolean;
+  isSecondary?: boolean;
+  isSmall?: boolean;
+  isLarge?: boolean;
+  isLoading?: boolean;
+}
+```
+
+## 🔧 Configuration
+
+### Tailwind CSS
+
+The design system extends Tailwind CSS with custom tokens:
+
+```js
+// tailwind.config.js
+module.exports = {
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: 'hsl(var(--primary))',
+        // ... other custom colors
+      },
+    },
+  },
+};
+```
+
+### Style Dictionary
+
+Design tokens are processed with Style Dictionary:
+
+```js
+// tokens/config.js
+module.exports = {
+  source: ['tokens/**/*.json'],
+  platforms: {
+    css: {
+      transformGroup: 'css',
+      buildPath: 'dist/tokens/',
+      files: [{
+        destination: 'variables.css',
+        format: 'css/variables'
+      }]
+    },
+  },
+};
+```
+
+## 📊 Bundle Analysis
+
+Monitor bundle size with each build:
 
 ```bash
-pnpm format
-pnpm format:check
+pnpm build
+# Check dist/ folder sizes
+du -sh dist/*
 ```
 
-### Type Checking
+The design system is optimized for tree shaking:
+
+```tsx
+// ✅ Tree-shakable imports
+import { Button } from '@nexus/ui';
+
+// ❌ Imports entire library
+import * as UI from '@nexus/ui';
+```
+
+## 🚀 Deployment
+
+### Storybook Deployment
+
+Storybook is automatically deployed to GitHub Pages on main branch pushes:
+
+- **URL**: https://nexus-ui.dev/storybook
+- **Trigger**: Push to `main` branch
+- **Build**: `pnpm build-storybook`
+
+### Package Publishing
 
 ```bash
-pnpm type-check
+# Build and publish
+pnpm build
+npm publish
 ```
 
-## Architecture
+### Chromatic Integration
 
-### File Structure
+Visual regression testing runs on every PR:
 
-```
-src/
-├── components/
-│   └── Button/
-│       ├── Button.tsx          # Main component
-│       ├── Button.types.ts     # TypeScript types
-│       ├── Button.styles.ts    # Style definitions
-│       └── index.ts           # Exports
-└── index.ts                   # Main exports
-```
+- **Service**: Chromatic
+- **Trigger**: Pull requests and main branch pushes
+- **Auto-accept**: Changes on main branch
+- **Baseline**: Latest main branch build
 
-### Design Principles
+## 🤝 Contributing
 
-1. **Composition over Configuration** - Flexible, composable components
-2. **TypeScript First** - Full type safety and developer experience
-3. **Accessibility by Default** - WCAG compliant out of the box
-4. **Performance Focused** - Tree-shakeable, minimal bundle impact
-5. **Consistent API** - Predictable prop patterns across components
+1. **Fork the repository**
+2. **Create a feature branch**: `git checkout -b feature/new-component`
+3. **Add your component** with tests and stories
+4. **Run the test suite**: `pnpm test`
+5. **Build and verify**: `pnpm build && pnpm storybook`
+6. **Submit a pull request**
 
-## Contributing
+### Component Checklist
 
-### Adding New Components
+- [ ] Component implementation with TypeScript
+- [ ] Comprehensive Storybook stories
+- [ ] Unit tests with good coverage
+- [ ] Accessibility testing
+- [ ] Design token usage
+- [ ] Documentation and examples
+- [ ] Visual regression tests pass
 
-1. Create component directory in `src/components/`
-2. Follow the established file structure:
-   - `Component.tsx` - Main component
-   - `Component.types.ts` - TypeScript interfaces
-   - `Component.styles.ts` - Style definitions (if complex)
-   - `index.ts` - Exports
-3. Export from main `src/index.ts`
-4. Add documentation to README
-5. Follow accessibility guidelines
-6. Include comprehensive TypeScript types
+## 📄 License
 
-### Code Standards
+MIT License - see [LICENSE](LICENSE) for details.
 
-- Use TypeScript for all components
-- Follow the established ESLint and Prettier configurations
-- Include JSDoc comments for props and complex logic
-- Use `forwardRef` for components that should forward refs
-- Follow the naming convention: PascalCase for components
+## 🔗 Links
 
-### Testing
+- [📚 Storybook Documentation](https://nexus-ui.dev/storybook)
+- [🎨 Chromatic Visual Tests](https://www.chromatic.com)
+- [♿ Accessibility Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+- [🎯 Design Tokens Specification](https://design-tokens.github.io/community-group/)
+- [⚛️ Radix UI Primitives](https://www.radix-ui.com/primitives)
 
-Components should be tested for:
+---
 
-- Rendering with different props
-- Accessibility compliance
-- Keyboard navigation
-- Event handling
-- Edge cases and error states
-
-## Roadmap
-
-### Planned Components
-
-- [ ] Input
-- [ ] Select
-- [ ] Checkbox
-- [ ] Radio
-- [ ] Switch
-- [ ] Modal
-- [ ] Tooltip
-- [ ] Card
-- [ ] Badge
-- [ ] Avatar
-- [ ] Spinner
-- [ ] Alert
-- [ ] Toast
-
-### Planned Features
-
-- [ ] Dark mode support
-- [ ] Animation system
-- [ ] Form validation integration
-- [ ] Storybook documentation
-- [ ] Visual regression testing
-- [ ] Component playground
-
-## License
-
-ISC License - Internal use within Nexus workspace.
+Built with ❤️ by the Nexus Team
