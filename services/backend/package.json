@@ -46,7 +46,7 @@
     "@nexus/shared-database": "workspace:*",
     "@nexus/shared-types": "workspace:*",
     "@nexus/shared-utils": "workspace:*",
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^6.11.1",
     "@sentry/nestjs": "^9.34.0",
     "@sentry/node": "^9.34.0",
     "@sentry/profiling-node": "^9.34.0",
