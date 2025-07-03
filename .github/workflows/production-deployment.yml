@@ -17,8 +17,14 @@ env:
   NODE_VERSION: 18
 
 jobs:
+  # Security scanning must pass before production deployment
+  security-gate:
+    uses: ./.github/workflows/security-scanning.yml
+    secrets: inherit
+
   # Validate that staging deployment was successful
   validate-staging:
+    needs: security-gate
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     outputs:

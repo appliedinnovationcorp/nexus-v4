@@ -1,0 +1,414 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop, staging ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: 18
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  pull-requests: write
+
+jobs:
+  # CodeQL Static Analysis Security Testing (SAST)
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'typescript' ]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Override default queries to include security-extended pack
+          queries: security-extended,security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build applications
+        run: pnpm build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+          upload: true
+
+  # Dependency vulnerability scanning
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run npm audit
+        run: |
+          echo "## NPM Audit Results" >> $GITHUB_STEP_SUMMARY
+          pnpm audit --audit-level moderate --json > audit-results.json || true
+          
+          # Check for high/critical vulnerabilities
+          HIGH_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.high // 0')
+          CRITICAL_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.critical // 0')
+          
+          echo "High severity vulnerabilities: $HIGH_VULNS" >> $GITHUB_STEP_SUMMARY
+          echo "Critical severity vulnerabilities: $CRITICAL_VULNS" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$HIGH_VULNS" -gt 0 ] || [ "$CRITICAL_VULNS" -gt 0 ]; then
+            echo "::error::High or critical vulnerabilities found in dependencies!"
+            echo "Run 'pnpm audit fix' to resolve issues"
+            cat audit-results.json | jq '.advisories'
+            exit 1
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit-results
+          path: audit-results.json
+          retention-days: 30
+
+  # Secret scanning
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # Container vulnerability scanning with Trivy
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [codeql-analysis, dependency-scan]
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies and build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:security-scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:security-scan
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'  # Don't fail here, we'll check results below
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy with table output for summary
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:security-scan
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+        id: trivy-scan
+
+      - name: Check for critical vulnerabilities
+        run: |
+          # Run Trivy again to get JSON output for parsing
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v ${{ github.workspace }}:/workspace \
+            aquasec/trivy:latest image \
+            --format json \
+            --severity CRITICAL,HIGH \
+            --no-progress \
+            ${{ env.IMAGE_NAME }}:security-scan > trivy-results.json
+          
+          # Parse results
+          CRITICAL_COUNT=$(cat trivy-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length')
+          HIGH_COUNT=$(cat trivy-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length')
+          
+          echo "## Container Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "Critical vulnerabilities: $CRITICAL_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "High vulnerabilities: $HIGH_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          # Fail if critical vulnerabilities found
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Critical vulnerabilities found in container image!"
+            echo "Critical vulnerabilities must be fixed before deployment"
+            exit 1
+          fi
+          
+          # Warn about high vulnerabilities but don't fail
+          if [ "$HIGH_COUNT" -gt 5 ]; then
+            echo "::warning::High number of high-severity vulnerabilities found ($HIGH_COUNT)"
+            echo "Consider addressing these vulnerabilities"
+          fi
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-scan-results
+          path: |
+            trivy-results.json
+            trivy-results.sarif
+          retention-days: 30
+
+  # Infrastructure security scanning
+  infrastructure-scan:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov for Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infrastructure/
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+          soft_fail: true  # Don't fail the job, we'll check results
+
+      - name: Upload Checkov scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+      - name: Run Checkov with CLI output
+        run: |
+          pip install checkov
+          
+          echo "## Infrastructure Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Run Checkov and capture results
+          checkov -d infrastructure/ --framework terraform --output cli --quiet > checkov-output.txt || true
+          
+          # Check for failed checks
+          FAILED_CHECKS=$(grep -c "FAILED" checkov-output.txt || echo "0")
+          PASSED_CHECKS=$(grep -c "PASSED" checkov-output.txt || echo "0")
+          
+          echo "Failed security checks: $FAILED_CHECKS" >> $GITHUB_STEP_SUMMARY
+          echo "Passed security checks: $PASSED_CHECKS" >> $GITHUB_STEP_SUMMARY
+          
+          # Show failed checks in summary
+          if [ "$FAILED_CHECKS" -gt 0 ]; then
+            echo "### Failed Security Checks:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -A 2 -B 1 "FAILED" checkov-output.txt >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Fail if critical infrastructure issues found
+          CRITICAL_ISSUES=$(grep -c "CKV.*HIGH" checkov-output.txt || echo "0")
+          if [ "$CRITICAL_ISSUES" -gt 0 ]; then
+            echo "::error::Critical infrastructure security issues found!"
+            exit 1
+          fi
+
+      - name: Upload Checkov results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: infrastructure-scan-results
+          path: |
+            checkov-output.txt
+            checkov-results.sarif
+          retention-days: 30
+
+  # Docker security best practices
+  docker-security-scan:
+    name: Docker Security Best Practices
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint (Dockerfile linter)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint-results.sarif
+          no-fail: true
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: hadolint-results.sarif
+
+      - name: Run Hadolint with text output
+        run: |
+          docker run --rm -i hadolint/hadolint:latest < Dockerfile > hadolint-output.txt || true
+          
+          echo "## Dockerfile Security Analysis" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -s hadolint-output.txt ]; then
+            echo "### Issues Found:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat hadolint-output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            # Check for error-level issues
+            ERROR_COUNT=$(grep -c "DL.*error" hadolint-output.txt || echo "0")
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "::error::Dockerfile security errors found!"
+              exit 1
+            fi
+          else
+            echo "No Dockerfile issues found ✅" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Security gate - consolidate all security results
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [codeql-analysis, dependency-scan, secret-scan, container-scan, infrastructure-scan, docker-security-scan]
+    if: always()
+    
+    steps:
+      - name: Check security scan results
+        run: |
+          echo "## Security Gate Results" >> $GITHUB_STEP_SUMMARY
+          
+          # Check each job result
+          CODEQL_RESULT="${{ needs.codeql-analysis.result }}"
+          DEPENDENCY_RESULT="${{ needs.dependency-scan.result }}"
+          SECRET_RESULT="${{ needs.secret-scan.result }}"
+          CONTAINER_RESULT="${{ needs.container-scan.result }}"
+          INFRASTRUCTURE_RESULT="${{ needs.infrastructure-scan.result }}"
+          DOCKER_RESULT="${{ needs.docker-security-scan.result }}"
+          
+          echo "- CodeQL Analysis: $CODEQL_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Scan: $DEPENDENCY_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "- Secret Scan: $SECRET_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "- Container Scan: $CONTAINER_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "- Infrastructure Scan: $INFRASTRUCTURE_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker Security: $DOCKER_RESULT" >> $GITHUB_STEP_SUMMARY
+          
+          # Fail if any critical security check failed
+          if [ "$CODEQL_RESULT" = "failure" ] || [ "$DEPENDENCY_RESULT" = "failure" ] || 
+             [ "$SECRET_RESULT" = "failure" ] || [ "$CONTAINER_RESULT" = "failure" ] ||
+             [ "$INFRASTRUCTURE_RESULT" = "failure" ] || [ "$DOCKER_RESULT" = "failure" ]; then
+            echo "::error::Security gate failed! Critical security issues must be resolved before merge."
+            echo "### ❌ Security Gate: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "Critical security vulnerabilities detected. Please review and fix the issues above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "### ✅ Security Gate: PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "All security scans completed successfully." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { needs } = context.payload.workflow_run || { needs: {} };
+            const allPassed = Object.values({
+              codeql: '${{ needs.codeql-analysis.result }}',
+              dependency: '${{ needs.dependency-scan.result }}',
+              secret: '${{ needs.secret-scan.result }}',
+              container: '${{ needs.container-scan.result }}',
+              infrastructure: '${{ needs.infrastructure-scan.result }}',
+              docker: '${{ needs.docker-security-scan.result }}'
+            }).every(result => result === 'success');
+            
+            const comment = allPassed 
+              ? '🔒 **Security Gate: PASSED** ✅\n\nAll security scans completed successfully. Safe to merge!'
+              : '🚨 **Security Gate: FAILED** ❌\n\nCritical security issues detected. Please review the security scan results and fix all high-severity issues before merging.';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

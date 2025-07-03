@@ -12,8 +12,14 @@ env:
   NODE_VERSION: 18
 
 jobs:
+  # Security scanning must pass before deployment
+  security-gate:
+    uses: ./.github/workflows/security-scanning.yml
+    secrets: inherit
+
   # Build and test the application
   build-and-test:
+    needs: security-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

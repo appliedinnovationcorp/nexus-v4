@@ -1,0 +1,57 @@
+# CodeQL Configuration for Enhanced Security Analysis
+
+name: "Enhanced Security Analysis"
+
+# Disable default queries and use security-focused ones
+disable-default-queries: false
+
+# Include additional query packs for comprehensive security analysis
+queries:
+  - name: security-extended
+    uses: security-extended
+  - name: security-and-quality  
+    uses: security-and-quality
+
+# Path filters to focus on application code
+paths:
+  - "apps/"
+  - "packages/"
+  - "libs/"
+  - "services/"
+  - "utils/"
+
+# Ignore paths that don't need security analysis
+paths-ignore:
+  - "node_modules/"
+  - "dist/"
+  - "build/"
+  - ".next/"
+  - "coverage/"
+  - "docs/"
+  - "*.md"
+  - "*.json"
+  - "*.yml"
+  - "*.yaml"
+  - "infrastructure/"
+
+# Custom query filters for specific security concerns
+query-filters:
+  - include:
+      kind: problem
+      tags:
+        - security
+        - external/cwe/cwe-079  # XSS
+        - external/cwe/cwe-089  # SQL Injection
+        - external/cwe/cwe-022  # Path Traversal
+        - external/cwe/cwe-078  # Command Injection
+        - external/cwe/cwe-094  # Code Injection
+        - external/cwe/cwe-798  # Hard-coded Credentials
+        - external/cwe/cwe-327  # Weak Cryptography
+        - external/cwe/cwe-352  # CSRF
+        - external/cwe/cwe-434  # File Upload
+        - external/cwe/cwe-502  # Deserialization
+
+# Compilation database settings for better analysis
+compilation-database:
+  # Use build command to generate compilation database
+  build-command: "pnpm build"

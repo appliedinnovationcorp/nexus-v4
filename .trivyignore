@@ -1,0 +1,14 @@
+# Trivy ignore file for known false positives or accepted risks
+
+# Example: Ignore specific CVEs that have been assessed and accepted
+# CVE-2023-12345
+
+# Ignore low severity issues in development dependencies
+# These can be uncommented if needed, but should be carefully considered
+# CVE-2023-*
+
+# Ignore specific packages with known issues that are being tracked
+# Format: CVE-ID or package-name
+
+# Note: Only add entries here after proper security review and approval
+# Each ignored vulnerability should have a corresponding ticket/issue

@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Enable version updates for npm (pnpm)
+  # Enable Dependabot for npm dependencies
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -13,51 +13,66 @@ updates:
     assignees:
       - "nexus-team"
     commit-message:
-      prefix: "deps"
+      prefix: "security"
       include: "scope"
-    labels:
-      - "dependencies"
-      - "automated"
+    # Only create PRs for security updates and major version updates
     ignore:
-      # Ignore major version updates for stable packages
-      - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "next"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@nestjs/*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch", "version-update:semver-minor"]
+    # Group related updates
+    groups:
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "security"
+      major-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "version-update:semver-major"
 
-  # Enable version updates for GitHub Actions
-  - package-ecosystem: "github-actions"
+  # Enable Dependabot for Docker dependencies
+  - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
+    reviewers:
+      - "nexus-team"
+    assignees:
+      - "nexus-team"
     commit-message:
-      prefix: "ci"
+      prefix: "security"
       include: "scope"
-    labels:
-      - "github-actions"
-      - "automated"
 
-  # Enable version updates for Docker
-  - package-ecosystem: "docker"
-    directory: "/apps/frontend"
+  # Enable Dependabot for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "nexus-team"
+    assignees:
+      - "nexus-team"
     commit-message:
-      prefix: "docker"
-    labels:
-      - "docker"
-      - "automated"
+      prefix: "security"
+      include: "scope"
 
-  - package-ecosystem: "docker"
-    directory: "/services/backend"
+  # Enable Dependabot for Terraform
+  - package-ecosystem: "terraform"
+    directory: "/infrastructure/terraform"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    reviewers:
+      - "nexus-team"
+    assignees:
+      - "nexus-team"
     commit-message:
-      prefix: "docker"
-    labels:
-      - "docker"
-      - "automated"
+      prefix: "security"
+      include: "scope"
