@@ -1,0 +1,484 @@
+version: "1.0"
+
+# PagerDuty Configuration
+pagerduty:
+  apiKey: "${PAGERDUTY_API_KEY}"
+  serviceKey: "${PAGERDUTY_SERVICE_KEY}"
+  enabled: true
+  services:
+    nexus-api:
+      serviceId: "${PAGERDUTY_API_SERVICE_ID}"
+      escalationPolicyId: "${PAGERDUTY_API_ESCALATION_POLICY_ID}"
+    nexus-database:
+      serviceId: "${PAGERDUTY_DB_SERVICE_ID}"
+      escalationPolicyId: "${PAGERDUTY_DB_ESCALATION_POLICY_ID}"
+    secret-management:
+      serviceId: "${PAGERDUTY_SECRET_SERVICE_ID}"
+      escalationPolicyId: "${PAGERDUTY_SECRET_ESCALATION_POLICY_ID}"
+    nexus-frontend:
+      serviceId: "${PAGERDUTY_FRONTEND_SERVICE_ID}"
+      escalationPolicyId: "${PAGERDUTY_FRONTEND_ESCALATION_POLICY_ID}"
+
+# Opsgenie Configuration (Fallback)
+opsgenie:
+  apiKey: "${OPSGENIE_API_KEY}"
+  teamId: "${OPSGENIE_TEAM_ID}"
+  enabled: true
+  integrations:
+    nexus-api:
+      integrationKey: "${OPSGENIE_API_INTEGRATION_KEY}"
+    nexus-database:
+      integrationKey: "${OPSGENIE_DB_INTEGRATION_KEY}"
+    secret-management:
+      integrationKey: "${OPSGENIE_SECRET_INTEGRATION_KEY}"
+    nexus-frontend:
+      integrationKey: "${OPSGENIE_FRONTEND_INTEGRATION_KEY}"
+
+# Global Incident Management Settings
+global:
+  enabled: true
+  environment: "${NODE_ENV:-production}"
+  defaultSeverity: "sev3"
+  autoEscalationEnabled: true
+  autoEscalationDelay: 15  # minutes
+  postMortemRequired: ["sev1", "sev2"]
+  
+  # Communication Settings
+  communications:
+    slack:
+      webhookUrl: "${SLACK_WEBHOOK_URL}"
+      channels:
+        incidents: "#incidents"
+        postmortems: "#post-mortems"
+        oncall: "#on-call"
+    
+    statusPage:
+      url: "${STATUS_PAGE_URL}"
+      apiKey: "${STATUS_PAGE_API_KEY}"
+      autoUpdate: true
+    
+    email:
+      enabled: true
+      smtpHost: "${SMTP_HOST}"
+      smtpPort: "${SMTP_PORT:-587}"
+      smtpUser: "${SMTP_USER}"
+      smtpPassword: "${SMTP_PASSWORD}"
+      fromAddress: "incidents@nexus.dev"
+
+# Severity Definitions
+severities:
+  sev1:
+    name: "Critical"
+    description: "Complete service outage or critical security breach"
+    maxResponseTime: 5  # minutes
+    escalationDelay: 10  # minutes
+    requiresPostMortem: true
+    customerCommunication: true
+    executiveNotification: true
+    businessImpact: "critical"
+    
+  sev2:
+    name: "High"
+    description: "Significant service degradation affecting multiple users"
+    maxResponseTime: 15  # minutes
+    escalationDelay: 30  # minutes
+    requiresPostMortem: true
+    customerCommunication: true
+    executiveNotification: false
+    businessImpact: "high"
+    
+  sev3:
+    name: "Medium"
+    description: "Service degradation with limited user impact"
+    maxResponseTime: 30  # minutes
+    escalationDelay: 60  # minutes
+    requiresPostMortem: false
+    customerCommunication: false
+    executiveNotification: false
+    businessImpact: "medium"
+    
+  sev4:
+    name: "Low"
+    description: "Minor issues with minimal impact"
+    maxResponseTime: 120  # minutes
+    escalationDelay: 240  # minutes
+    requiresPostMortem: false
+    customerCommunication: false
+    executiveNotification: false
+    businessImpact: "low"
+
+# Service Definitions
+services:
+  nexus-api:
+    name: "Nexus API"
+    description: "Core API service"
+    tier: "tier-0"
+    owner: "backend-team"
+    oncallSchedule: "nexus-api-oncall"
+    dependencies: ["nexus-database", "secret-management"]
+    sloThresholds:
+      availability: 99.9
+      latency_p95: 500  # ms
+      error_rate: 0.1   # %
+    
+  nexus-database:
+    name: "Nexus Database"
+    description: "Primary database cluster"
+    tier: "tier-1"
+    owner: "platform-team"
+    oncallSchedule: "platform-oncall"
+    dependencies: ["nexus-storage"]
+    sloThresholds:
+      availability: 99.95
+      latency_p95: 100  # ms
+      error_rate: 0.05  # %
+    
+  secret-management:
+    name: "Secret Management"
+    description: "HashiCorp Vault secret management service"
+    tier: "tier-0"
+    owner: "security-team"
+    oncallSchedule: "security-oncall"
+    dependencies: ["vault-cluster", "nexus-database"]
+    sloThresholds:
+      availability: 99.95
+      latency_p95: 200  # ms
+      error_rate: 0.05  # %
+    
+  nexus-frontend:
+    name: "Nexus Frontend"
+    description: "Frontend application and CDN"
+    tier: "tier-1"
+    owner: "frontend-team"
+    oncallSchedule: "frontend-oncall"
+    dependencies: ["nexus-api", "cdn"]
+    sloThresholds:
+      availability: 99.5
+      latency_p95: 2000  # ms
+      error_rate: 1.0    # %
+
+# On-Call Schedules
+oncallSchedules:
+  nexus-api-oncall:
+    name: "API On-Call"
+    team: "backend-team"
+    timezone: "UTC"
+    rotationType: "weekly"
+    rotationLength: 168  # hours (1 week)
+    handoffTime: "09:00"
+    participants:
+      - userId: "backend-lead"
+        name: "Backend Lead"
+        email: "backend-lead@nexus.dev"
+        phone: "+1-555-0101"
+      - userId: "senior-backend-dev"
+        name: "Senior Backend Developer"
+        email: "senior-backend@nexus.dev"
+        phone: "+1-555-0102"
+    
+  platform-oncall:
+    name: "Platform On-Call"
+    team: "platform-team"
+    timezone: "UTC"
+    rotationType: "weekly"
+    rotationLength: 168
+    handoffTime: "09:00"
+    participants:
+      - userId: "platform-lead"
+        name: "Platform Lead"
+        email: "platform-lead@nexus.dev"
+        phone: "+1-555-0201"
+      - userId: "sre-engineer"
+        name: "SRE Engineer"
+        email: "sre@nexus.dev"
+        phone: "+1-555-0202"
+    
+  security-oncall:
+    name: "Security On-Call"
+    team: "security-team"
+    timezone: "UTC"
+    rotationType: "weekly"
+    rotationLength: 168
+    handoffTime: "09:00"
+    participants:
+      - userId: "security-lead"
+        name: "Security Lead"
+        email: "security-lead@nexus.dev"
+        phone: "+1-555-0301"
+      - userId: "security-engineer"
+        name: "Security Engineer"
+        email: "security@nexus.dev"
+        phone: "+1-555-0302"
+    
+  frontend-oncall:
+    name: "Frontend On-Call"
+    team: "frontend-team"
+    timezone: "UTC"
+    rotationType: "weekly"
+    rotationLength: 168
+    handoffTime: "09:00"
+    participants:
+      - userId: "frontend-lead"
+        name: "Frontend Lead"
+        email: "frontend-lead@nexus.dev"
+        phone: "+1-555-0401"
+      - userId: "senior-frontend-dev"
+        name: "Senior Frontend Developer"
+        email: "senior-frontend@nexus.dev"
+        phone: "+1-555-0402"
+
+# Escalation Policies
+escalationPolicies:
+  api-escalation:
+    name: "API Service Escalation"
+    service: "nexus-api"
+    levels:
+      - level: "l1"
+        targets:
+          - type: "schedule"
+            id: "nexus-api-oncall"
+            name: "API On-Call"
+        escalationDelay: 15  # minutes
+      - level: "l2"
+        targets:
+          - type: "user"
+            id: "backend-lead"
+            name: "Backend Lead"
+          - type: "user"
+            id: "platform-lead"
+            name: "Platform Lead"
+        escalationDelay: 30
+      - level: "l3"
+        targets:
+          - type: "user"
+            id: "engineering-director"
+            name: "Engineering Director"
+        escalationDelay: 60
+      - level: "executive"
+        targets:
+          - type: "user"
+            id: "cto"
+            name: "CTO"
+        escalationDelay: 120
+    
+  platform-escalation:
+    name: "Platform Service Escalation"
+    service: "nexus-database"
+    levels:
+      - level: "l1"
+        targets:
+          - type: "schedule"
+            id: "platform-oncall"
+            name: "Platform On-Call"
+        escalationDelay: 15
+      - level: "l2"
+        targets:
+          - type: "user"
+            id: "platform-lead"
+            name: "Platform Lead"
+          - type: "user"
+            id: "sre-lead"
+            name: "SRE Lead"
+        escalationDelay: 30
+      - level: "l3"
+        targets:
+          - type: "user"
+            id: "engineering-director"
+            name: "Engineering Director"
+        escalationDelay: 60
+
+# Alert Rules (SLO Integration)
+alertRules:
+  api-availability-breach:
+    name: "API Availability SLO Breach"
+    description: "API availability drops below SLO threshold"
+    service: "nexus-api"
+    condition:
+      metric: "slo:nexus-api:availability:30d"
+      threshold: 99.9
+      operator: "<"
+      window: "5m"
+      consecutiveBreaches: 2
+    severity: "sev2"
+    priority: "p2"
+    escalation:
+      enabled: true
+      delay: 30
+      targetLevel: "l2"
+    notifications:
+      pagerdutyKey: "${PAGERDUTY_API_SERVICE_KEY}"
+      slackChannels: ["#incidents", "#api-team"]
+    enabled: true
+    
+  api-latency-breach:
+    name: "API Latency SLO Breach"
+    description: "API P95 latency exceeds SLO threshold"
+    service: "nexus-api"
+    condition:
+      metric: "slo:nexus-api:latency:30d"
+      threshold: 95
+      operator: "<"
+      window: "10m"
+      consecutiveBreaches: 3
+    severity: "sev3"
+    priority: "p3"
+    escalation:
+      enabled: true
+      delay: 60
+      targetLevel: "l1"
+    notifications:
+      pagerdutyKey: "${PAGERDUTY_API_SERVICE_KEY}"
+      slackChannels: ["#api-team"]
+    enabled: true
+    
+  secret-mgmt-availability-breach:
+    name: "Secret Management Availability SLO Breach"
+    description: "Secret management service availability drops below SLO threshold"
+    service: "secret-management"
+    condition:
+      metric: "slo:secret-management:availability:30d"
+      threshold: 99.95
+      operator: "<"
+      window: "5m"
+      consecutiveBreaches: 1
+    severity: "sev1"
+    priority: "p1"
+    escalation:
+      enabled: true
+      delay: 10
+      targetLevel: "l2"
+    notifications:
+      pagerdutyKey: "${PAGERDUTY_SECRET_SERVICE_KEY}"
+      slackChannels: ["#incidents", "#security-team"]
+      emailRecipients: ["security-lead@nexus.dev", "platform-lead@nexus.dev"]
+    enabled: true
+    
+  database-performance-breach:
+    name: "Database Performance SLO Breach"
+    description: "Database query performance degrades below SLO threshold"
+    service: "nexus-database"
+    condition:
+      metric: "slo:nexus-database:latency:30d"
+      threshold: 90
+      operator: "<"
+      window: "15m"
+      consecutiveBreaches: 2
+    severity: "sev2"
+    priority: "p2"
+    escalation:
+      enabled: true
+      delay: 30
+      targetLevel: "l1"
+    notifications:
+      pagerdutyKey: "${PAGERDUTY_DB_SERVICE_KEY}"
+      slackChannels: ["#platform-team"]
+    enabled: true
+
+# Post-Mortem Configuration
+postMortems:
+  enabled: true
+  templates:
+    standard:
+      sections:
+        - "Executive Summary"
+        - "Timeline"
+        - "Root Cause Analysis"
+        - "Impact Assessment"
+        - "What Went Well"
+        - "What Could Be Improved"
+        - "Action Items"
+        - "Lessons Learned"
+    
+    security:
+      sections:
+        - "Executive Summary"
+        - "Security Impact Assessment"
+        - "Timeline"
+        - "Root Cause Analysis"
+        - "Vulnerability Analysis"
+        - "Remediation Actions"
+        - "Prevention Measures"
+        - "Lessons Learned"
+    
+    performance:
+      sections:
+        - "Executive Summary"
+        - "Performance Impact"
+        - "Timeline"
+        - "Root Cause Analysis"
+        - "SLO Impact Assessment"
+        - "Optimization Actions"
+        - "Monitoring Improvements"
+        - "Lessons Learned"
+  
+  reviewProcess:
+    requiredReviewers: 2
+    reviewerRoles: ["incident_commander", "service_owner", "sre_lead"]
+    approvalRequired: true
+    publishToWiki: true
+    shareWithTeams: true
+  
+  actionItems:
+    trackingEnabled: true
+    defaultDueDate: 30  # days
+    reminderInterval: 7  # days
+    escalationEnabled: true
+
+# Metrics and Reporting
+metrics:
+  enabled: true
+  retention: 365  # days
+  
+  kpis:
+    - name: "Mean Time to Acknowledge (MTTA)"
+      target: 15  # minutes
+      threshold: 30
+    - name: "Mean Time to Resolve (MTTR)"
+      target: 60  # minutes
+      threshold: 120
+    - name: "Incident Frequency"
+      target: 5   # per month
+      threshold: 10
+    - name: "SLO Breach Rate"
+      target: 0.1  # %
+      threshold: 0.5
+  
+  reports:
+    weekly:
+      enabled: true
+      recipients: ["sre-team@nexus.dev", "engineering-leads@nexus.dev"]
+      includeMetrics: true
+      includeTrends: true
+    
+    monthly:
+      enabled: true
+      recipients: ["leadership@nexus.dev", "all-engineering@nexus.dev"]
+      includeMetrics: true
+      includeTrends: true
+      includePostMortemSummary: true
+
+# Integration Settings
+integrations:
+  prometheus:
+    enabled: true
+    url: "${PROMETHEUS_URL}"
+    alertmanagerUrl: "${ALERTMANAGER_URL}"
+    
+  grafana:
+    enabled: true
+    url: "${GRAFANA_URL}"
+    apiKey: "${GRAFANA_API_KEY}"
+    
+  jira:
+    enabled: false
+    url: "${JIRA_URL}"
+    username: "${JIRA_USERNAME}"
+    apiToken: "${JIRA_API_TOKEN}"
+    projectKey: "INC"
+    
+  github:
+    enabled: true
+    token: "${GITHUB_TOKEN}"
+    repository: "nexus-team/nexus-workspace"
+    createIssues: true
+    labelPrefix: "incident"

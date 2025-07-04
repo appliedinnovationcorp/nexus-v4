@@ -1,0 +1,97 @@
+{
+  "name": "@nexus/incident-management",
+  "version": "1.0.0",
+  "description": "Comprehensive incident management system with PagerDuty/Opsgenie integration and blameless post-mortem process",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "configs",
+    "templates",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server.esm.js",
+      "require": "./dist/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./webhooks": {
+      "import": "./dist/webhooks.esm.js",
+      "require": "./dist/webhooks.js",
+      "types": "./dist/webhooks.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "validate-config": "node scripts/validate-config.js",
+    "sync-oncall": "node scripts/sync-oncall.js",
+    "generate-postmortem": "node scripts/generate-postmortem.js",
+    "incident-stats": "node scripts/incident-stats.js",
+    "setup-integrations": "node scripts/setup-integrations.js",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "incident-management",
+    "pagerduty",
+    "opsgenie",
+    "on-call",
+    "post-mortem",
+    "sre",
+    "monitoring",
+    "alerting"
+  ],
+  "author": "Nexus Team",
+  "license": "MIT",
+  "dependencies": {
+    "@pagerduty/pdjs": "^7.0.2",
+    "axios": "^1.6.2",
+    "date-fns": "^2.30.0",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.1",
+    "yaml": "^2.3.4",
+    "handlebars": "^4.7.8",
+    "markdown-it": "^13.0.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.9.0",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.6.1",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "rollup-plugin-dts": "^6.1.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nexus-team/nexus-workspace.git",
+    "directory": "packages/incident-management"
+  },
+  "bugs": {
+    "url": "https://github.com/nexus-team/nexus-workspace/issues"
+  },
+  "homepage": "https://nexus-incidents.dev"
+}
