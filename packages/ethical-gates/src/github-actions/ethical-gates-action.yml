@@ -1,0 +1,70 @@
+name: 'Ethical & Sustainable Quality Gates'
+description: 'Automated accessibility and carbon footprint compliance checks for ethical software development'
+author: 'Nexus Ethical Gates Team'
+
+inputs:
+  config-path:
+    description: 'Path to ethical gates configuration file'
+    required: false
+    default: '.ethical-gates/config.yaml'
+  targets:
+    description: 'Comma-separated list of URLs to audit'
+    required: false
+  skip-accessibility:
+    description: 'Skip accessibility audit'
+    required: false
+    default: 'false'
+  skip-carbon:
+    description: 'Skip carbon footprint estimation'
+    required: false
+    default: 'false'
+  wcag-level:
+    description: 'WCAG compliance level (A, AA, AAA)'
+    required: false
+    default: 'AA'
+  fail-on-violation:
+    description: 'Fail the build if quality gates are not met'
+    required: false
+    default: 'true'
+  create-pr-comment:
+    description: 'Create pull request comment with results'
+    required: false
+    default: 'true'
+  create-github-issues:
+    description: 'Create GitHub issues for violations'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for creating issues and comments'
+    required: false
+  website-carbon-api-key:
+    description: 'Website Carbon API key for enhanced carbon analysis'
+    required: false
+
+outputs:
+  overall-score:
+    description: 'Overall ethical score (0-100)'
+  overall-grade:
+    description: 'Overall grade (A+ to F)'
+  is-compliant:
+    description: 'Whether all quality gates passed'
+  accessibility-score:
+    description: 'Accessibility score (0-100)'
+  accessibility-violations:
+    description: 'Number of accessibility violations'
+  carbon-per-page:
+    description: 'Carbon footprint per page view (grams CO2)'
+  monthly-carbon:
+    description: 'Monthly carbon footprint (kg CO2)'
+  report-path:
+    description: 'Path to generated HTML report'
+  action-items-count:
+    description: 'Number of action items generated'
+
+runs:
+  using: 'node20'
+  main: 'dist/github-actions/index.js'
+
+branding:
+  icon: 'heart'
+  color: 'green'
