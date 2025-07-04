@@ -1,0 +1,49 @@
+name: 'FinOps Cost Analysis'
+description: 'Analyze infrastructure changes for cost impact and tagging compliance'
+author: 'Nexus FinOps Team'
+
+inputs:
+  terraform-plan-path:
+    description: 'Path to Terraform plan JSON file'
+    required: false
+  cloudformation-template-path:
+    description: 'Path to CloudFormation template file'
+    required: false
+  aws-region:
+    description: 'AWS region for cost analysis'
+    required: true
+    default: 'us-east-1'
+  cost-threshold:
+    description: 'Cost threshold for warnings (USD per month)'
+    required: false
+    default: '500'
+  enable-pr-comments:
+    description: 'Enable pull request comments with cost analysis'
+    required: false
+    default: 'true'
+  output-format:
+    description: 'Output format (json, markdown, html)'
+    required: false
+    default: 'markdown'
+  finops-config-path:
+    description: 'Path to FinOps configuration file'
+    required: false
+    default: '.finops/config.yaml'
+
+outputs:
+  cost-impact:
+    description: 'Monthly cost impact in USD'
+  risk-level:
+    description: 'Risk level (LOW, MEDIUM, HIGH, CRITICAL)'
+  report-path:
+    description: 'Path to generated cost analysis report'
+  tagging-compliance:
+    description: 'Tagging compliance percentage'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'dollar-sign'
+  color: 'green'

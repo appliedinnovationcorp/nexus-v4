@@ -1,0 +1,417 @@
+name: Infrastructure Cost Analysis
+
+on:
+  pull_request:
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.json'
+      - 'infrastructure/**'
+      - 'terraform/**'
+      - 'cloudformation/**'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - 'infrastructure/**'
+      - 'terraform/**'
+      - 'cloudformation/**'
+  schedule:
+    # Run daily cost analysis at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      analysis_type:
+        description: 'Type of analysis to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - cost-only
+          - tagging-only
+      cost_threshold:
+        description: 'Cost threshold for alerts (USD)'
+        required: false
+        default: '500'
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.6.0
+  NODE_VERSION: 20
+
+jobs:
+  terraform-plan:
+    name: Generate Terraform Plan
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'terraform') || github.event_name == 'pull_request'
+    outputs:
+      plan-path: ${{ steps.plan.outputs.plan-path }}
+      has-changes: ${{ steps.plan.outputs.has-changes }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: |
+          find . -name "*.tf" -type f -exec dirname {} \; | sort -u | while read dir; do
+            if [ -f "$dir/main.tf" ] || [ -f "$dir/terraform.tf" ]; then
+              echo "Initializing Terraform in $dir"
+              cd "$dir"
+              terraform init -backend=false
+              cd - > /dev/null
+            fi
+          done
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          plan_files=()
+          find . -name "*.tf" -type f -exec dirname {} \; | sort -u | while read dir; do
+            if [ -f "$dir/main.tf" ] || [ -f "$dir/terraform.tf" ]; then
+              echo "Planning Terraform in $dir"
+              cd "$dir"
+              plan_file="../terraform-plan-$(basename $dir).json"
+              terraform plan -out=tfplan -no-color
+              terraform show -json tfplan > "$plan_file"
+              echo "Generated plan: $plan_file"
+              plan_files+=("$plan_file")
+              cd - > /dev/null
+            fi
+          done
+          
+          if [ ${#plan_files[@]} -gt 0 ]; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "plan-path=${plan_files[0]}" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Terraform Plans
+        if: steps.plan.outputs.has-changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plans
+          path: terraform-plan-*.json
+          retention-days: 7
+
+  cloudformation-validate:
+    name: Validate CloudFormation Templates
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'cloudformation') || github.event_name == 'pull_request'
+    outputs:
+      template-paths: ${{ steps.find-templates.outputs.paths }}
+      has-templates: ${{ steps.find-templates.outputs.has-templates }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find CloudFormation templates
+        id: find-templates
+        run: |
+          templates=$(find . -name "*.yaml" -o -name "*.yml" -o -name "*.json" | grep -E "(cloudformation|cfn|template)" | head -10)
+          if [ -n "$templates" ]; then
+            echo "has-templates=true" >> $GITHUB_OUTPUT
+            echo "paths<<EOF" >> $GITHUB_OUTPUT
+            echo "$templates" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has-templates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate CloudFormation templates
+        if: steps.find-templates.outputs.has-templates == 'true'
+        run: |
+          echo "${{ steps.find-templates.outputs.paths }}" | while read template; do
+            if [ -f "$template" ]; then
+              echo "Validating $template"
+              aws cloudformation validate-template --template-body file://"$template" || echo "Validation failed for $template"
+            fi
+          done
+
+  cost-analysis:
+    name: Cost Impact Analysis
+    runs-on: ubuntu-latest
+    needs: [terraform-plan, cloudformation-validate]
+    if: always() && (needs.terraform-plan.outputs.has-changes == 'true' || needs.cloudformation-validate.outputs.has-templates == 'true')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd packages/finops
+          npm ci
+
+      - name: Download Terraform plans
+        if: needs.terraform-plan.outputs.has-changes == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plans
+          path: ./plans
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run cost analysis
+        id: cost-analysis
+        uses: ./packages/finops/src/github-actions
+        with:
+          terraform-plan-path: ${{ needs.terraform-plan.outputs.plan-path }}
+          cloudformation-template-path: ${{ needs.cloudformation-validate.outputs.template-paths }}
+          aws-region: ${{ env.AWS_REGION }}
+          cost-threshold: ${{ github.event.inputs.cost_threshold || '500' }}
+          enable-pr-comments: ${{ github.event_name == 'pull_request' }}
+          output-format: 'markdown'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload cost analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-analysis-report
+          path: ${{ steps.cost-analysis.outputs.report-path }}
+          retention-days: 30
+
+      - name: Post to Slack
+        if: steps.cost-analysis.outputs.risk-level == 'HIGH' || steps.cost-analysis.outputs.risk-level == 'CRITICAL'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "text": "🚨 High Cost Impact Detected",
+              "attachments": [
+                {
+                  "color": "${{ steps.cost-analysis.outputs.risk-level == 'CRITICAL' && 'danger' || 'warning' }}",
+                  "fields": [
+                    {
+                      "title": "Repository",
+                      "value": "${{ github.repository }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Cost Impact",
+                      "value": "${{ steps.cost-analysis.outputs.cost-impact }}/month",
+                      "short": true
+                    },
+                    {
+                      "title": "Risk Level",
+                      "value": "${{ steps.cost-analysis.outputs.risk-level }}",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  tagging-compliance:
+    name: Resource Tagging Compliance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.analysis_type == 'full' || github.event.inputs.analysis_type == 'tagging-only'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd packages/finops
+          npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run tagging compliance check
+        id: tagging
+        run: |
+          cd packages/finops
+          npm run build
+          node -e "
+            const { ResourceTaggingManager } = require('./dist/core/tagging');
+            const config = {
+              aws: { region: '${{ env.AWS_REGION }}' },
+              tagging: {
+                enforceRequiredTags: true,
+                requiredTags: ['Environment', 'Project', 'Owner', 'CostCenter'],
+                tagValidationRules: {},
+                autoTagging: { enabled: false, defaultTags: {} }
+              }
+            };
+            const manager = new ResourceTaggingManager(config);
+            manager.getTagComplianceReport().then(report => {
+              console.log('Compliance Report:', JSON.stringify(report, null, 2));
+              console.log('compliance-percentage=' + report.compliancePercentage);
+            }).catch(console.error);
+          "
+
+      - name: Create compliance issue
+        if: steps.tagging.outputs.compliance-percentage < 80
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🏷️ Low Resource Tagging Compliance';
+            const body = `
+            ## Resource Tagging Compliance Alert
+            
+            Current compliance: **${{ steps.tagging.outputs.compliance-percentage }}%**
+            
+            Resources are not meeting the required tagging standards. This impacts:
+            - Cost allocation and tracking
+            - Resource management and ownership
+            - Compliance and governance
+            
+            ### Action Required
+            - Review non-compliant resources
+            - Apply missing required tags
+            - Update tagging policies if needed
+            
+            Generated by: ${{ github.workflow }} on ${{ github.ref_name }}
+            `;
+            
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['finops', 'tagging-compliance']
+            });
+            
+            const existingIssue = issues.data.find(issue => issue.title === title);
+            
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: body
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['finops', 'tagging-compliance', 'priority-medium']
+              });
+            }
+
+  cost-optimization:
+    name: Cost Optimization Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.analysis_type == 'full'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd packages/finops
+          npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Generate cost optimization report
+        run: |
+          cd packages/finops
+          npm run build
+          # This would run cost optimization analysis
+          echo "Cost optimization analysis would run here"
+
+      - name: Schedule optimization recommendations
+        run: |
+          echo "Scheduling optimization recommendations for review"
+          # This would create issues or notifications for optimization opportunities
+
+  cleanup:
+    name: Cleanup Artifacts
+    runs-on: ubuntu-latest
+    needs: [cost-analysis, tagging-compliance, cost-optimization]
+    if: always()
+    
+    steps:
+      - name: Delete temporary artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Clean up old artifacts to save storage
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const oldArtifacts = artifacts.data.artifacts.filter(artifact => {
+              const ageInDays = (Date.now() - new Date(artifact.created_at).getTime()) / (1000 * 60 * 60 * 24);
+              return ageInDays > 7 && artifact.name.includes('terraform-plan');
+            });
+            
+            for (const artifact of oldArtifacts) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+              });
+            }
