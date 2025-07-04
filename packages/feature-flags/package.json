@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "unleash-client": "^5.5.0",
-    "launchdarkly-node-server-sdk": "^9.3.0",
+    "launchdarkly-node-server-sdk": "^7.0.4",
     "launchdarkly-react-client-sdk": "^3.3.0",
     "redis": "^4.6.0",
     "node-cache": "^5.1.2",

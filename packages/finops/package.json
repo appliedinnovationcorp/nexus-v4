@@ -21,7 +21,7 @@
     "cost-optimization"
   ],
   "dependencies": {
-    "@aws-sdk/client-ce": "^3.450.0",
+    "@aws-sdk/client-cost-explorer": "^3.450.0",
     "@aws-sdk/client-cloudformation": "^3.450.0",
     "@aws-sdk/client-ec2": "^3.450.0",
     "@aws-sdk/client-organizations": "^3.450.0",

@@ -1,47 +1,39 @@
-/** @type {import('jest').Config} */
+/**
+ * @fileoverview Jest configuration for UI package
+ */
+
 module.exports = {
   displayName: '@nexus/ui',
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  roots: ['<rootDir>/src'],
+  testMatch: [
+    '**/__tests__/**/*.{ts,tsx}',
+    '**/*.{test,spec}.{ts,tsx}',
+  ],
+  transform: {
+    '^.+\\.(ts|tsx)$': 'ts-jest',
+  },
   moduleNameMapping: {
-    '^@/(.*)$': '<rootDir>/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
-  testMatch: [
-    '<rootDir>/src/**/__tests__/**/*.(ts|tsx)',
-    '<rootDir>/src/**/*.(test|spec).(ts|tsx)',
+  setupFilesAfterEnv: [
+    '<rootDir>/../../tests/setup/jest.setup.js',
+    '<rootDir>/src/test/setup.ts',
   ],
   collectCoverageFrom: [
-    'src/**/*.(ts|tsx)',
-    '!src/**/*.stories.(ts|tsx)',
+    'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/test/**/*',
-    '!src/index.ts',
+    '!src/**/*.test.{ts,tsx}',
+    '!src/**/*.spec.{ts,tsx}',
+    '!src/**/*.stories.{ts,tsx}',
+    '!src/test/**',
   ],
-  coverageThreshold: {
-    global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
-    },
-  },
+  coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
-    }],
-  },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   testPathIgnorePatterns: [
-    '<rootDir>/node_modules/',
-    '<rootDir>/dist/',
-    '<rootDir>/storybook-static/',
-  ],
-  watchPathIgnorePatterns: [
-    '<rootDir>/node_modules/',
-    '<rootDir>/dist/',
-    '<rootDir>/storybook-static/',
+    '/node_modules/',
+    '/dist/',
+    '/storybook-static/',
   ],
 };

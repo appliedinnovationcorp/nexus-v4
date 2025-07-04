@@ -1,0 +1,37 @@
+{
+  "name": "@nexus/event-bus",
+  "version": "1.0.0",
+  "description": "Event-driven architecture bus for Nexus microservices",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/microservices": "^11.0.1",
+    "@nexus/shared-types": "workspace:*",
+    "@nexus/shared-utils": "workspace:*",
+    "redis": "^4.7.0",
+    "rxjs": "^7.8.1",
+    "uuid": "^11.1.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.7",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^9.18.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3"
+  }
+}

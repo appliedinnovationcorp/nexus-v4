@@ -6,7 +6,7 @@ import {
   ChaosEvent,
   FaultInjectionConfig,
 } from '../types';
-import { SecretManager } from '@nexus/secret-management';
+import { SecretManagerClient } from '@nexus/secret-management';
 import { AnalyticsTracker } from '@nexus/analytics';
 import { SLOManager } from '@nexus/sre';
 import { IncidentManager } from '@nexus/incident-management';
@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { addSeconds, isAfter, isBefore } from 'date-fns';
 
 export class ChaosEngine extends EventEmitter {
-  private secretManager: SecretManager;
+  private secretManager: SecretManagerClient;
   private analytics: AnalyticsTracker;
   private sloManager: SLOManager;
   private incidentManager: IncidentManager;
@@ -26,7 +26,7 @@ export class ChaosEngine extends EventEmitter {
   constructor(config: ChaosConfig) {
     super();
     this.config = config;
-    this.secretManager = new SecretManager();
+    this.secretManager = new SecretManagerClient({} as any);
     this.analytics = new AnalyticsTracker();
     this.sloManager = new SLOManager({} as any); // Would use actual SRE config
     this.incidentManager = new IncidentManager({} as any); // Would use actual incident config

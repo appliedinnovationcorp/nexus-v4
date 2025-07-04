@@ -376,9 +376,9 @@ export class AnalyticsManager {
               userId,
               ...properties
             },
-            userProfile: userProperties,
+            userProfile: userProperties as any,
             ...userProperties
-          }
+          } as any
         });
       },
       trackEvent: (eventName: string, eventProperties?: Record<string, any>) => {
@@ -392,7 +392,7 @@ export class AnalyticsManager {
               ...properties
             },
             ...eventProperties
-          }
+          } as any
         });
       }
     };

@@ -1,0 +1,50 @@
+{
+  "name": "@nexus/ai-business-copilot",
+  "version": "1.0.0",
+  "description": "AI-powered business automation copilot for SMBs - the GitHub Copilot for Getting Things Done",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai-copilot",
+    "business-automation",
+    "smb",
+    "workflow-automation",
+    "productivity",
+    "ai-assistant"
+  ],
+  "dependencies": {
+    "openai": "^4.20.0",
+    "@anthropic-ai/sdk": "^0.9.0",
+    "langchain": "^0.0.200",
+    "@langchain/openai": "^0.0.14",
+    "zod": "^3.22.4",
+    "axios": "^1.6.0",
+    "date-fns": "^2.30.0",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0"
+  }
+}

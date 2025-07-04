@@ -1,0 +1,48 @@
+{
+  "name": "@nexus/smb-integrations",
+  "version": "1.0.0",
+  "description": "SMB-focused integrations for popular business tools - QuickBooks, Shopify, Gmail, Slack, etc.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "smb-integrations",
+    "quickbooks",
+    "shopify",
+    "gmail",
+    "slack",
+    "business-automation"
+  ],
+  "dependencies": {
+    "axios": "^1.6.0",
+    "oauth2-server": "^3.1.1",
+    "node-quickbooks": "^2.0.34",
+    "shopify-api-node": "^3.12.5",
+    "googleapis": "^128.0.0",
+    "@slack/web-api": "^6.10.0",
+    "mailchimp-api-v3": "^1.15.0",
+    "stripe": "^14.9.0",
+    "square": "^30.0.0",
+    "zod": "^3.22.4",
+    "date-fns": "^2.30.0",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0"
+  }
+}

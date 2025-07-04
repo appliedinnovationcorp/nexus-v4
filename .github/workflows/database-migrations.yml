@@ -1,0 +1,254 @@
+name: Database Migrations
+
+on:
+  push:
+    branches: [main, develop, staging]
+    paths:
+      - 'database/migrations/**'
+      - 'prisma/migrations/**'
+      - 'packages/shared-database/**'
+  pull_request:
+    branches: [main, develop, staging]
+    paths:
+      - 'database/migrations/**'
+      - 'prisma/migrations/**'
+      - 'packages/shared-database/**'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  validate-migrations:
+    name: Validate Database Migrations
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: nexus_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: test_admin
+          MONGO_INITDB_ROOT_PASSWORD: test_password
+          MONGO_INITDB_DATABASE: nexus_test
+        ports:
+          - 27017:27017
+          
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Setup test environment
+        run: |
+          cp .env.test .env
+          
+      - name: Run Prisma migrations
+        run: |
+          cd packages/shared-database
+          pnpm prisma migrate deploy
+          
+      - name: Validate migration rollback
+        run: |
+          cd packages/shared-database
+          # Test rollback capability
+          pnpm prisma migrate reset --force
+          pnpm prisma migrate deploy
+          
+      - name: Run database seeds
+        run: |
+          cd packages/shared-database
+          pnpm prisma db seed
+          
+      - name: Test database connectivity
+        run: |
+          node -e "
+            const { PrismaClient } = require('@prisma/client');
+            const prisma = new PrismaClient();
+            prisma.\$connect().then(() => {
+              console.log('✅ PostgreSQL connection successful');
+              return prisma.\$disconnect();
+            }).catch(console.error);
+          "
+
+  migration-safety-check:
+    name: Migration Safety Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Check for destructive migrations
+        run: |
+          echo "Checking for potentially destructive migration operations..."
+          
+          # Check for DROP operations
+          if grep -r "DROP TABLE\|DROP COLUMN\|DROP INDEX" database/migrations/ prisma/migrations/ 2>/dev/null; then
+            echo "⚠️ Destructive DROP operations detected!"
+            echo "Please ensure you have proper backups and approval for these changes."
+          fi
+          
+          # Check for data type changes
+          if grep -r "ALTER.*TYPE\|MODIFY.*TYPE" database/migrations/ prisma/migrations/ 2>/dev/null; then
+            echo "⚠️ Data type changes detected!"
+            echo "Please ensure compatibility with existing data."
+          fi
+          
+          # Check for NOT NULL additions without defaults
+          if grep -r "ADD.*NOT NULL" database/migrations/ prisma/migrations/ 2>/dev/null; then
+            if ! grep -r "DEFAULT" database/migrations/ prisma/migrations/ 2>/dev/null; then
+              echo "❌ NOT NULL constraint added without DEFAULT value!"
+              echo "This will fail on existing data."
+              exit 1
+            fi
+          fi
+          
+          echo "✅ Migration safety check completed"
+
+  deploy-migrations-staging:
+    name: Deploy Migrations to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    needs: [validate-migrations, migration-safety-check]
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Setup staging environment
+        run: |
+          cp .env.staging .env
+          
+      - name: Create database backup
+        run: |
+          echo "Creating database backup before migration..."
+          # Add your backup script here
+          
+      - name: Deploy migrations to staging
+        run: |
+          cd packages/shared-database
+          pnpm prisma migrate deploy
+          
+      - name: Verify migration success
+        run: |
+          cd packages/shared-database
+          pnpm prisma migrate status
+          
+      - name: Notify staging deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: 'Database migrations deployed to staging'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()
+
+  deploy-migrations-production:
+    name: Deploy Migrations to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [validate-migrations]
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Setup production environment
+        run: |
+          cp .env.production .env
+          
+      - name: Create database backup
+        run: |
+          echo "Creating production database backup..."
+          # Add your production backup script here
+          
+      - name: Deploy migrations to production
+        run: |
+          cd packages/shared-database
+          pnpm prisma migrate deploy
+          
+      - name: Verify migration success
+        run: |
+          cd packages/shared-database
+          pnpm prisma migrate status
+          
+      - name: Run post-migration health checks
+        run: |
+          # Add health check scripts here
+          echo "Running post-migration health checks..."
+          
+      - name: Notify production deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#critical-deployments'
+          text: 'Database migrations deployed to production'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()

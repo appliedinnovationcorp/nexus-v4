@@ -1,0 +1,89 @@
+{
+  "name": "@nexus/code-generation",
+  "version": "1.0.0",
+  "description": "Advanced code generation tools with Plop.js and Hygen for scaffolding modules, components, and endpoints",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "nexus-generate": "./bin/nexus-generate.js",
+    "nexus-plop": "./bin/nexus-plop.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "templates",
+    "generators",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "plop": "plop",
+    "generate": "hygen",
+    "validate-templates": "node scripts/validate-templates.js",
+    "update-templates": "node scripts/update-templates.js",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "code-generation",
+    "scaffolding",
+    "plop",
+    "hygen",
+    "templates",
+    "developer-tools",
+    "automation"
+  ],
+  "author": "Nexus Team",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "change-case": "^5.2.0",
+    "fs-extra": "^11.1.1",
+    "glob": "^10.3.10",
+    "handlebars": "^4.7.8",
+    "hygen": "^6.2.11",
+    "inquirer": "^9.2.12",
+    "lodash": "^4.17.21",
+    "ora": "^7.0.1",
+    "plop": "^4.0.1",
+    "semver": "^7.5.4",
+    "validate-npm-package-name": "^5.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.8",
+    "@rollup/plugin-node-resolve": "^15.3.1",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.7",
+    "@types/jest": "^29.5.8",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.9.0",
+    "@types/semver": "^7.5.6",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.6.1",
+    "rollup-plugin-dts": "^6.2.1",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nexus-team/nexus-workspace.git",
+    "directory": "packages/code-generation"
+  },
+  "bugs": {
+    "url": "https://github.com/nexus-team/nexus-workspace/issues"
+  },
+  "homepage": "https://nexus-codegen.dev"
+}
