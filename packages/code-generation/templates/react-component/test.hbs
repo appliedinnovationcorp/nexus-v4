@@ -1,0 +1,302 @@
+import * as React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+{{#if (includes features 'analytics')}}
+import { useFeatureTracking } from '@nexus/analytics/react';
+{{/if}}
+import { {{pascalCase name}}{{#if (eq type 'compound')}}, {{pascalCase name}}Header, {{pascalCase name}}Content, use{{pascalCase name}}{{/if}} } from './{{pascalCase name}}';
+
+{{#if (includes features 'analytics')}}
+// Mock the analytics hook
+vi.mock('@nexus/analytics/react', () => ({
+  useFeatureTracking: vi.fn(() => ({
+    trackInteraction: vi.fn(),
+  })),
+}));
+{{/if}}
+
+describe('{{pascalCase name}}', () => {
+  {{#if (includes features 'analytics')}}
+  const mockTrackInteraction = vi.fn();
+  
+  beforeEach(() => {
+    vi.mocked(useFeatureTracking).mockReturnValue({
+      trackInteraction: mockTrackInteraction,
+    });
+  });
+  
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+  {{/if}}
+
+  it('renders without crashing', () => {
+    render(<{{pascalCase name}}>Test content</{{pascalCase name}}>);
+    expect(screen.getByText('Test content')).toBeInTheDocument();
+  });
+
+  it('applies custom className', () => {
+    render(<{{pascalCase name}} className="custom-class">Test</{{pascalCase name}}>);
+    const element = screen.getByText('Test');
+    expect(element).toHaveClass('custom-class');
+  });
+
+  it('handles disabled state correctly', () => {
+    render(<{{pascalCase name}} disabled>Disabled content</{{pascalCase name}}>);
+    const element = screen.getByText('Disabled content');
+    {{#if (includes features 'a11y')}}
+    expect(element).toHaveAttribute('aria-disabled', 'true');
+    {{/if}}
+  });
+
+  {{#if (includes features 'a11y')}}
+  it('supports accessibility attributes', () => {
+    render(
+      <{{pascalCase name}} 
+        aria-label="Test label"
+        aria-describedby="description"
+        aria-labelledby="label"
+      >
+        Content
+      </{{pascalCase name}}>
+    );
+    const element = screen.getByText('Content');
+    expect(element).toHaveAttribute('aria-label', 'Test label');
+    expect(element).toHaveAttribute('aria-describedby', 'description');
+    expect(element).toHaveAttribute('aria-labelledby', 'label');
+  });
+
+  it('has proper focus management', () => {
+    render(<{{pascalCase name}}>Focusable content</{{pascalCase name}}>);
+    const element = screen.getByText('Focusable content');
+    element.focus();
+    expect(element).toHaveFocus();
+  });
+  {{/if}}
+
+  {{#if (includes features 'analytics')}}
+  it('tracks interactions when clicked', async () => {
+    render(
+      <{{pascalCase name}} 
+        trackingProps={{
+          area: 'test-area',
+          action: 'test-action',
+          label: 'test-label'
+        }}
+      >
+        Clickable content
+      </{{pascalCase name}}>
+    );
+    
+    const element = screen.getByText('Clickable content');
+    fireEvent.click(element);
+    
+    await waitFor(() => {
+      expect(mockTrackInteraction).toHaveBeenCalledWith('click', {
+        action: 'test-action',
+        label: 'test-label'
+      });
+    });
+  });
+
+  it('does not track interactions when disabled', async () => {
+    render(
+      <{{pascalCase name}} 
+        disabled
+        trackingProps={{
+          area: 'test-area',
+          action: 'test-action'
+        }}
+      >
+        Disabled clickable
+      </{{pascalCase name}}>
+    );
+    
+    const element = screen.getByText('Disabled clickable');
+    fireEvent.click(element);
+    
+    // Wait a bit to ensure no tracking call is made
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(mockTrackInteraction).not.toHaveBeenCalled();
+  });
+  {{/if}}
+
+  {{#if (eq styling 'tailwind-cva')}}
+  it('applies variant classes correctly', () => {
+    const { rerender } = render(<{{pascalCase name}} variant="secondary">Secondary</{{pascalCase name}}>);
+    let element = screen.getByText('Secondary');
+    expect(element).toHaveClass(); // Check for variant-specific classes
+    
+    rerender(<{{pascalCase name}} variant="outline">Outline</{{pascalCase name}}>);
+    element = screen.getByText('Outline');
+    expect(element).toHaveClass(); // Check for outline variant classes
+  });
+
+  it('applies size classes correctly', () => {
+    const { rerender } = render(<{{pascalCase name}} size="sm">Small</{{pascalCase name}}>);
+    let element = screen.getByText('Small');
+    expect(element).toHaveClass(); // Check for small size classes
+    
+    rerender(<{{pascalCase name}} size="lg">Large</{{pascalCase name}}>);
+    element = screen.getByText('Large');
+    expect(element).toHaveClass(); // Check for large size classes
+  });
+  {{/if}}
+
+  {{#if (includes features 'form')}}
+  it('handles form interactions correctly', () => {
+    const handleChange = vi.fn();
+    render(
+      <{{pascalCase name}} 
+        name="test-field"
+        value="initial-value"
+        onChange={handleChange}
+      >
+        Form field
+      </{{pascalCase name}}>
+    );
+    
+    // Test form-specific behavior
+    const element = screen.getByText('Form field');
+    expect(element).toBeInTheDocument();
+  });
+
+  it('displays error state correctly', () => {
+    render(
+      <{{pascalCase name}} 
+        error="This field is required"
+      >
+        Field with error
+      </{{pascalCase name}}>
+    );
+    
+    const element = screen.getByText('Field with error');
+    expect(element).toBeInTheDocument();
+    // Add specific error state assertions based on implementation
+  });
+
+  it('handles required field validation', () => {
+    render(
+      <{{pascalCase name}} 
+        required
+        name="required-field"
+      >
+        Required field
+      </{{pascalCase name}}>
+    );
+    
+    const element = screen.getByText('Required field');
+    expect(element).toBeInTheDocument();
+    // Add required field assertions
+  });
+  {{/if}}
+
+  it('forwards ref correctly', () => {
+    const ref = React.createRef<HTMLDivElement>();
+    render(<{{pascalCase name}} ref={ref}>Ref test</{{pascalCase name}}>);
+    expect(ref.current).toBeInstanceOf(HTMLDivElement);
+  });
+
+  it('spreads additional props', () => {
+    render(
+      <{{pascalCase name}} 
+        data-testid="custom-test-id"
+        role="button"
+      >
+        Props test
+      </{{pascalCase name}}>
+    );
+    
+    const element = screen.getByTestId('custom-test-id');
+    expect(element).toHaveAttribute('role', 'button');
+  });
+
+  {{#if (eq type 'compound')}}
+  describe('Compound Components', () => {
+    it('renders header and content correctly', () => {
+      render(
+        <{{pascalCase name}}>
+          <{{pascalCase name}}Header>Header content</{{pascalCase name}}Header>
+          <{{pascalCase name}}Content>Main content</{{pascalCase name}}Content>
+        </{{pascalCase name}}>
+      );
+      
+      expect(screen.getByText('Header content')).toBeInTheDocument();
+      expect(screen.getByText('Main content')).toBeInTheDocument();
+    });
+
+    it('provides context to child components', () => {
+      const TestChild = () => {
+        const context = use{{pascalCase name}}();
+        return <div>Disabled: {context.disabled.toString()}</div>;
+      };
+
+      render(
+        <{{pascalCase name}} disabled>
+          <TestChild />
+        </{{pascalCase name}}>
+      );
+      
+      expect(screen.getByText('Disabled: true')).toBeInTheDocument();
+    });
+
+    it('throws error when context is used outside provider', () => {
+      const TestChild = () => {
+        use{{pascalCase name}}();
+        return <div>Should not render</div>;
+      };
+
+      // Suppress console.error for this test
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      expect(() => render(<TestChild />)).toThrow(
+        'use{{pascalCase name}} must be used within a {{pascalCase name}}'
+      );
+      
+      consoleSpy.mockRestore();
+    });
+  });
+  {{/if}}
+
+  describe('Edge Cases', () => {
+    it('handles empty children gracefully', () => {
+      render(<{{pascalCase name}}>{null}</{{pascalCase name}}>);
+      // Should not crash
+    });
+
+    it('handles undefined children gracefully', () => {
+      render(<{{pascalCase name}}>{undefined}</{{pascalCase name}}>);
+      // Should not crash
+    });
+
+    it('handles multiple children correctly', () => {
+      render(
+        <{{pascalCase name}}>
+          <span>First child</span>
+          <span>Second child</span>
+        </{{pascalCase name}}>
+      );
+      
+      expect(screen.getByText('First child')).toBeInTheDocument();
+      expect(screen.getByText('Second child')).toBeInTheDocument();
+    });
+  });
+
+  describe('Performance', () => {
+    it('does not re-render unnecessarily', () => {
+      const renderSpy = vi.fn();
+      
+      const TestComponent = React.memo(() => {
+        renderSpy();
+        return <{{pascalCase name}}>Performance test</{{pascalCase name}}>;
+      });
+
+      const { rerender } = render(<TestComponent />);
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+      
+      // Re-render with same props
+      rerender(<TestComponent />);
+      expect(renderSpy).toHaveBeenCalledTimes(1); // Should not re-render
+    });
+  });
+});

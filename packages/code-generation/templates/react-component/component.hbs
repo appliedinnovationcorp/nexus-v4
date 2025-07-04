@@ -1,0 +1,244 @@
+import * as React from 'react';
+{{#if (includes features 'typescript')}}
+import { {{pascalCase name}}Props } from './{{pascalCase name}}.types';
+{{/if}}
+{{#if (eq styling 'css-modules')}}
+import styles from './{{pascalCase name}}.module.css';
+{{/if}}
+{{#if (eq styling 'styled-components')}}
+import { StyledContainer } from './{{pascalCase name}}.styles';
+{{/if}}
+{{#if (eq styling 'tailwind-cva')}}
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '../../lib/utils';
+{{/if}}
+{{#if (includes features 'analytics')}}
+import { useFeatureTracking } from '@nexus/analytics/react';
+{{/if}}
+
+{{#if (eq styling 'tailwind-cva')}}
+const {{camelCase name}}Variants = cva(
+  '{{#if (includes features 'a11y')}}focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2{{/if}}',
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+      },
+      size: {
+        default: 'h-10 px-4 py-2',
+        sm: 'h-9 rounded-md px-3',
+        lg: 'h-11 rounded-md px-8',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'default',
+    },
+  }
+);
+
+{{/if}}
+{{#if (includes features 'typescript')}}
+export interface {{pascalCase name}}Props{{#if (eq styling 'tailwind-cva')}} extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof {{camelCase name}}Variants>{{else}} extends React.HTMLAttributes<HTMLDivElement>{{/if}} {
+  /**
+   * The content to display inside the {{name}}
+   */
+  children?: React.ReactNode;
+  /**
+   * Additional CSS class name
+   */
+  className?: string;
+  /**
+   * Whether the {{name}} is disabled
+   */
+  disabled?: boolean;
+  {{#if (includes features 'analytics')}}
+  /**
+   * Analytics tracking properties
+   */
+  trackingProps?: {
+    area?: string;
+    action?: string;
+    label?: string;
+  };
+  {{/if}}
+}
+
+{{/if}}
+/**
+ * {{description}}
+ * 
+ * @example
+ * ```tsx
+ * <{{pascalCase name}}>
+ *   Content goes here
+ * </{{pascalCase name}}>
+ * ```
+ */
+{{#if (eq type 'functional')}}
+export const {{pascalCase name}} = React.forwardRef<
+  HTMLDivElement,
+  {{#if (includes features 'typescript')}}{{pascalCase name}}Props{{else}}React.HTMLAttributes<HTMLDivElement>{{/if}}
+>(({
+  children,
+  className,
+  disabled = false,
+  {{#if (eq styling 'tailwind-cva')}}
+  variant,
+  size,
+  {{/if}}
+  {{#if (includes features 'analytics')}}
+  trackingProps,
+  {{/if}}
+  ...props
+}, ref) => {
+  {{#if (includes features 'analytics')}}
+  const { trackInteraction } = useFeatureTracking({
+    area: trackingProps?.area || 'components',
+    name: '{{kebabCase name}}',
+    trackOnMount: true
+  });
+
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!disabled) {
+      trackInteraction('click', {
+        action: trackingProps?.action,
+        label: trackingProps?.label
+      });
+      props.onClick?.(event);
+    }
+  };
+  {{/if}}
+
+  return (
+    {{#if (eq styling 'styled-components')}}
+    <StyledContainer
+    {{else if (eq styling 'css-modules')}}
+    <div
+      className={cn(styles.container, className)}
+    {{else if (eq styling 'tailwind-cva')}}
+    <div
+      className={cn({{camelCase name}}Variants({ variant, size }), className)}
+    {{else}}
+    <div
+      className={className}
+    {{/if}}
+      ref={ref}
+      {{#if (includes features 'a11y')}}
+      role="{{#if (includes features 'form')}}group{{else}}presentation{{/if}}"
+      {{#if disabled}}
+      aria-disabled="true"
+      {{/if}}
+      {{/if}}
+      {{#if (includes features 'analytics')}}
+      onClick={handleClick}
+      {{/if}}
+      {...props}
+    >
+      {children}
+    {{#if (eq styling 'styled-components')}}
+    </StyledContainer>
+    {{else}}
+    </div>
+    {{/if}}
+  );
+});
+
+{{pascalCase name}}.displayName = '{{pascalCase name}}';
+{{/if}}
+
+{{#if (eq type 'compound')}}
+interface {{pascalCase name}}ContextValue {
+  disabled: boolean;
+  variant: string;
+}
+
+const {{pascalCase name}}Context = React.createContext<{{pascalCase name}}ContextValue | undefined>(undefined);
+
+export const {{pascalCase name}} = React.forwardRef<
+  HTMLDivElement,
+  {{#if (includes features 'typescript')}}{{pascalCase name}}Props{{else}}React.HTMLAttributes<HTMLDivElement>{{/if}}
+>(({
+  children,
+  className,
+  disabled = false,
+  {{#if (eq styling 'tailwind-cva')}}
+  variant = 'default',
+  {{/if}}
+  ...props
+}, ref) => {
+  const contextValue = React.useMemo(() => ({
+    disabled,
+    {{#if (eq styling 'tailwind-cva')}}
+    variant,
+    {{/if}}
+  }), [disabled{{#if (eq styling 'tailwind-cva')}}, variant{{/if}}]);
+
+  return (
+    <{{pascalCase name}}Context.Provider value={contextValue}>
+      <div
+        ref={ref}
+        className={cn(
+          {{#if (eq styling 'tailwind-cva')}}
+          {{camelCase name}}Variants({ variant }),
+          {{/if}}
+          className
+        )}
+        {{#if (includes features 'a11y')}}
+        role="group"
+        {{#if disabled}}
+        aria-disabled="true"
+        {{/if}}
+        {{/if}}
+        {...props}
+      >
+        {children}
+      </div>
+    </{{pascalCase name}}Context.Provider>
+  );
+});
+
+{{pascalCase name}}.displayName = '{{pascalCase name}}';
+
+// Compound component parts
+export const {{pascalCase name}}Header = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      className={cn('{{kebabCase name}}-header', className)}
+      {...props}
+    />
+  );
+});
+
+{{pascalCase name}}Header.displayName = '{{pascalCase name}}Header';
+
+export const {{pascalCase name}}Content = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      className={cn('{{kebabCase name}}-content', className)}
+      {...props}
+    />
+  );
+});
+
+{{pascalCase name}}Content.displayName = '{{pascalCase name}}Content';
+
+// Hook to use the context
+export const use{{pascalCase name}} = () => {
+  const context = React.useContext({{pascalCase name}}Context);
+  if (context === undefined) {
+    throw new Error('use{{pascalCase name}} must be used within a {{pascalCase name}}');
+  }
+  return context;
+};
+{{/if}}

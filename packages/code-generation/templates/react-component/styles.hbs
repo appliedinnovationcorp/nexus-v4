@@ -1,0 +1,362 @@
+{{#if (eq styling 'styled-components')}}
+import styled, { css } from 'styled-components';
+{{#if (includes features 'typescript')}}
+import { {{pascalCase name}}Props } from './{{pascalCase name}}.types';
+{{/if}}
+
+/**
+ * Base styles for {{pascalCase name}}
+ */
+const baseStyles = css`
+  /* Reset and base styles */
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  
+  /* Layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Typography */
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  
+  /* Transitions */
+  transition: all 0.2s ease-in-out;
+  
+  {{#if (includes features 'a11y')}}
+  /* Accessibility */
+  &:focus-visible {
+    outline: 2px solid var(--focus-color, #0066cc);
+    outline-offset: 2px;
+  }
+  
+  &[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  {{/if}}
+`;
+
+/**
+ * Variant styles for {{pascalCase name}}
+ */
+const variantStyles = {
+  default: css`
+    background-color: var(--primary-bg, #0066cc);
+    color: var(--primary-text, #ffffff);
+    border: 1px solid var(--primary-border, #0066cc);
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--primary-bg-hover, #0052a3);
+      border-color: var(--primary-border-hover, #0052a3);
+    }
+    
+    &:active:not([aria-disabled="true"]) {
+      background-color: var(--primary-bg-active, #003d7a);
+      border-color: var(--primary-border-active, #003d7a);
+    }
+  `,
+  
+  secondary: css`
+    background-color: var(--secondary-bg, #6c757d);
+    color: var(--secondary-text, #ffffff);
+    border: 1px solid var(--secondary-border, #6c757d);
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--secondary-bg-hover, #5a6268);
+      border-color: var(--secondary-border-hover, #5a6268);
+    }
+    
+    &:active:not([aria-disabled="true"]) {
+      background-color: var(--secondary-bg-active, #484e53);
+      border-color: var(--secondary-border-active, #484e53);
+    }
+  `,
+  
+  outline: css`
+    background-color: transparent;
+    color: var(--outline-text, #0066cc);
+    border: 1px solid var(--outline-border, #0066cc);
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--outline-bg-hover, #f8f9fa);
+      color: var(--outline-text-hover, #0052a3);
+      border-color: var(--outline-border-hover, #0052a3);
+    }
+    
+    &:active:not([aria-disabled="true"]) {
+      background-color: var(--outline-bg-active, #e9ecef);
+      color: var(--outline-text-active, #003d7a);
+      border-color: var(--outline-border-active, #003d7a);
+    }
+  `,
+  
+  ghost: css`
+    background-color: transparent;
+    color: var(--ghost-text, #6c757d);
+    border: 1px solid transparent;
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--ghost-bg-hover, #f8f9fa);
+      color: var(--ghost-text-hover, #495057);
+    }
+    
+    &:active:not([aria-disabled="true"]) {
+      background-color: var(--ghost-bg-active, #e9ecef);
+      color: var(--ghost-text-active, #343a40);
+    }
+  `,
+};
+
+/**
+ * Size styles for {{pascalCase name}}
+ */
+const sizeStyles = {
+  sm: css`
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 0.25rem;
+    min-height: 2rem;
+  `,
+  
+  default: css`
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    border-radius: 0.375rem;
+    min-height: 2.5rem;
+  `,
+  
+  lg: css`
+    padding: 0.75rem 1.5rem;
+    font-size: 1.125rem;
+    border-radius: 0.5rem;
+    min-height: 3rem;
+  `,
+};
+
+/**
+ * Main styled component for {{pascalCase name}}
+ */
+export const StyledContainer = styled.div<{{#if (includes features 'typescript')}}{{pascalCase name}}Props{{else}}any{{/if}}>`
+  ${baseStyles}
+  
+  /* Apply variant styles */
+  ${({ variant = 'default' }) => variantStyles[variant as keyof typeof variantStyles] || variantStyles.default}
+  
+  /* Apply size styles */
+  ${({ size = 'default' }) => sizeStyles[size as keyof typeof sizeStyles] || sizeStyles.default}
+  
+  /* Disabled state */
+  ${({ disabled }) => disabled && css`
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+  `}
+  
+  {{#if (includes features 'form')}}
+  /* Form-specific styles */
+  ${({ error }) => error && css`
+    border-color: var(--error-border, #dc3545);
+    color: var(--error-text, #dc3545);
+    
+    &:focus {
+      box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+    }
+  `}
+  {{/if}}
+`;
+
+{{#if (eq type 'compound')}}
+/**
+ * Styled header component
+ */
+export const StyledHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color, #dee2e6);
+  font-weight: 600;
+  font-size: 1.125rem;
+`;
+
+/**
+ * Styled content component
+ */
+export const StyledContent = styled.div`
+  padding: 1rem;
+  flex: 1;
+  overflow: auto;
+`;
+
+/**
+ * Styled footer component
+ */
+export const StyledFooter = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-top: 1px solid var(--border-color, #dee2e6);
+`;
+{{/if}}
+
+{{/if}}
+
+{{#if (eq styling 'css-modules')}}
+/* {{pascalCase name}}.module.css */
+
+.container {
+  /* Reset and base styles */
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  
+  /* Layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Typography */
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  
+  /* Transitions */
+  transition: all 0.2s ease-in-out;
+  
+  /* Default variant */
+  background-color: var(--primary-bg, #0066cc);
+  color: var(--primary-text, #ffffff);
+  border: 1px solid var(--primary-border, #0066cc);
+  
+  /* Default size */
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  min-height: 2.5rem;
+}
+
+{{#if (includes features 'a11y')}}
+.container:focus-visible {
+  outline: 2px solid var(--focus-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.container[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+{{/if}}
+
+/* Hover states */
+.container:hover:not([aria-disabled="true"]) {
+  background-color: var(--primary-bg-hover, #0052a3);
+  border-color: var(--primary-border-hover, #0052a3);
+}
+
+.container:active:not([aria-disabled="true"]) {
+  background-color: var(--primary-bg-active, #003d7a);
+  border-color: var(--primary-border-active, #003d7a);
+}
+
+/* Variants */
+.secondary {
+  background-color: var(--secondary-bg, #6c757d);
+  color: var(--secondary-text, #ffffff);
+  border-color: var(--secondary-border, #6c757d);
+}
+
+.secondary:hover:not([aria-disabled="true"]) {
+  background-color: var(--secondary-bg-hover, #5a6268);
+  border-color: var(--secondary-border-hover, #5a6268);
+}
+
+.outline {
+  background-color: transparent;
+  color: var(--outline-text, #0066cc);
+  border-color: var(--outline-border, #0066cc);
+}
+
+.outline:hover:not([aria-disabled="true"]) {
+  background-color: var(--outline-bg-hover, #f8f9fa);
+  color: var(--outline-text-hover, #0052a3);
+  border-color: var(--outline-border-hover, #0052a3);
+}
+
+.ghost {
+  background-color: transparent;
+  color: var(--ghost-text, #6c757d);
+  border-color: transparent;
+}
+
+.ghost:hover:not([aria-disabled="true"]) {
+  background-color: var(--ghost-bg-hover, #f8f9fa);
+  color: var(--ghost-text-hover, #495057);
+}
+
+/* Sizes */
+.small {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.25rem;
+  min-height: 2rem;
+}
+
+.large {
+  padding: 0.75rem 1.5rem;
+  font-size: 1.125rem;
+  border-radius: 0.5rem;
+  min-height: 3rem;
+}
+
+/* States */
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+{{#if (includes features 'form')}}
+.error {
+  border-color: var(--error-border, #dc3545);
+  color: var(--error-text, #dc3545);
+}
+
+.error:focus {
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+{{/if}}
+
+{{#if (eq type 'compound')}}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color, #dee2e6);
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.content {
+  padding: 1rem;
+  flex: 1;
+  overflow: auto;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-top: 1px solid var(--border-color, #dee2e6);
+}
+{{/if}}
+{{/if}}

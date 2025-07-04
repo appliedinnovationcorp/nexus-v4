@@ -1,0 +1,400 @@
+import type { Meta, StoryObj } from '@storybook/react';
+import * as React from 'react';
+import { {{pascalCase name}}{{#if (eq type 'compound')}}, {{pascalCase name}}Header, {{pascalCase name}}Content{{/if}} } from './{{pascalCase name}}';
+{{#if (includes features 'typescript')}}
+import type { {{pascalCase name}}Props } from './{{pascalCase name}}.types';
+{{/if}}
+
+const meta: Meta<typeof {{pascalCase name}}> = {
+  title: 'Components/{{pascalCase name}}',
+  component: {{pascalCase name}},
+  parameters: {
+    layout: 'centered',
+    docs: {
+      description: {
+        component: '{{description}}'
+      }
+    }
+  },
+  tags: ['autodocs'],
+  argTypes: {
+    children: {
+      control: 'text',
+      description: 'The content to display inside the {{name}}'
+    },
+    className: {
+      control: 'text',
+      description: 'Additional CSS class name'
+    },
+    disabled: {
+      control: 'boolean',
+      description: 'Whether the {{name}} is disabled'
+    },
+    {{#if (eq styling 'tailwind-cva')}}
+    variant: {
+      control: 'select',
+      options: ['default', 'secondary', 'outline', 'ghost'],
+      description: 'The visual variant of the component'
+    },
+    size: {
+      control: 'select',
+      options: ['sm', 'default', 'lg'],
+      description: 'The size of the component'
+    },
+    {{/if}}
+    {{#if (includes features 'form')}}
+    name: {
+      control: 'text',
+      description: 'The name attribute for form elements'
+    },
+    value: {
+      control: 'text',
+      description: 'The value of the form element'
+    },
+    required: {
+      control: 'boolean',
+      description: 'Whether the field is required'
+    },
+    error: {
+      control: 'text',
+      description: 'Error message to display'
+    },
+    {{/if}}
+    {{#if (includes features 'analytics')}}
+    trackingProps: {
+      control: 'object',
+      description: 'Analytics tracking properties'
+    },
+    {{/if}}
+  },
+  args: {
+    children: '{{pascalCase name}} Content',
+    disabled: false,
+    {{#if (eq styling 'tailwind-cva')}}
+    variant: 'default',
+    size: 'default',
+    {{/if}}
+    {{#if (includes features 'form')}}
+    required: false,
+    {{/if}}
+  }
+};
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+/**
+ * The default {{name}} component
+ */
+export const Default: Story = {
+  args: {
+    children: 'Default {{pascalCase name}}'
+  }
+};
+
+{{#if (eq styling 'tailwind-cva')}}
+/**
+ * Different visual variants of the {{name}}
+ */
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      <{{pascalCase name}} variant="default">Default Variant</{{pascalCase name}}>
+      <{{pascalCase name}} variant="secondary">Secondary Variant</{{pascalCase name}}>
+      <{{pascalCase name}} variant="outline">Outline Variant</{{pascalCase name}}>
+      <{{pascalCase name}} variant="ghost">Ghost Variant</{{pascalCase name}}>
+    </div>
+  )
+};
+
+/**
+ * Different sizes of the {{name}}
+ */
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 items-start">
+      <{{pascalCase name}} size="sm">Small Size</{{pascalCase name}}>
+      <{{pascalCase name}} size="default">Default Size</{{pascalCase name}}>
+      <{{pascalCase name}} size="lg">Large Size</{{pascalCase name}}>
+    </div>
+  )
+};
+{{/if}}
+
+/**
+ * Disabled state of the {{name}}
+ */
+export const Disabled: Story = {
+  args: {
+    disabled: true,
+    children: 'Disabled {{pascalCase name}}'
+  }
+};
+
+{{#if (includes features 'form')}}
+/**
+ * Form integration example
+ */
+export const FormIntegration: Story = {
+  render: () => {
+    const [value, setValue] = React.useState('');
+    const [error, setError] = React.useState('');
+
+    const handleChange = (newValue: string) => {
+      setValue(newValue);
+      if (newValue.length < 3) {
+        setError('Value must be at least 3 characters');
+      } else {
+        setError('');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <{{pascalCase name}}
+          name="example-field"
+          value={value}
+          onChange={handleChange}
+          required
+          error={error}
+        >
+          Form Field Example
+        </{{pascalCase name}}>
+        <p className="text-sm text-gray-600">
+          Current value: {value || '(empty)'}
+        </p>
+        {error && (
+          <p className="text-sm text-red-600">
+            Error: {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+};
+
+/**
+ * Required field example
+ */
+export const Required: Story = {
+  args: {
+    required: true,
+    name: 'required-field',
+    children: 'Required Field'
+  }
+};
+
+/**
+ * Error state example
+ */
+export const WithError: Story = {
+  args: {
+    error: 'This field is required',
+    children: 'Field with Error'
+  }
+};
+{{/if}}
+
+{{#if (includes features 'analytics')}}
+/**
+ * Analytics tracking example
+ */
+export const WithAnalytics: Story = {
+  args: {
+    trackingProps: {
+      area: 'storybook',
+      action: 'component_interaction',
+      label: 'example_component'
+    },
+    children: 'Click to Track'
+  }
+};
+{{/if}}
+
+{{#if (includes features 'a11y')}}
+/**
+ * Accessibility features demonstration
+ */
+export const Accessibility: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <{{pascalCase name}} aria-label="Accessible component">
+        With aria-label
+      </{{pascalCase name}}>
+      
+      <div>
+        <label id="component-label">Component Label:</label>
+        <{{pascalCase name}} aria-labelledby="component-label">
+          Labeled by external element
+        </{{pascalCase name}}>
+      </div>
+      
+      <div>
+        <{{pascalCase name}} aria-describedby="component-description">
+          With description
+        </{{pascalCase name}}>
+        <p id="component-description" className="text-sm text-gray-600">
+          This component demonstrates accessibility features
+        </p>
+      </div>
+    </div>
+  )
+};
+{{/if}}
+
+{{#if (eq type 'compound')}}
+/**
+ * Compound component example
+ */
+export const CompoundComponent: Story = {
+  render: () => (
+    <{{pascalCase name}} className="w-96">
+      <{{pascalCase name}}Header>
+        <h3 className="text-lg font-semibold">Component Header</h3>
+        <button className="text-sm text-gray-500">×</button>
+      </{{pascalCase name}}Header>
+      <{{pascalCase name}}Content>
+        <p>This is the main content area of the compound component.</p>
+        <p>It can contain any React elements or components.</p>
+      </{{pascalCase name}}Content>
+    </{{pascalCase name}}>
+  )
+};
+
+/**
+ * Complex compound component with multiple sections
+ */
+export const ComplexCompound: Story = {
+  render: () => (
+    <{{pascalCase name}} className="w-96" variant="outline">
+      <{{pascalCase name}}Header>
+        <div>
+          <h3 className="text-lg font-semibold">Advanced Example</h3>
+          <p className="text-sm text-gray-600">Subtitle text</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="px-2 py-1 text-xs bg-gray-100 rounded">Edit</button>
+          <button className="px-2 py-1 text-xs bg-gray-100 rounded">×</button>
+        </div>
+      </{{pascalCase name}}Header>
+      <{{pascalCase name}}Content>
+        <div className="space-y-4">
+          <div>
+            <h4 className="font-medium">Section 1</h4>
+            <p className="text-sm text-gray-600">Content for the first section.</p>
+          </div>
+          <div>
+            <h4 className="font-medium">Section 2</h4>
+            <p className="text-sm text-gray-600">Content for the second section.</p>
+          </div>
+        </div>
+      </{{pascalCase name}}Content>
+    </{{pascalCase name}}>
+  )
+};
+{{/if}}
+
+/**
+ * Interactive example with state management
+ */
+export const Interactive: Story = {
+  render: () => {
+    const [count, setCount] = React.useState(0);
+    const [disabled, setDisabled] = React.useState(false);
+
+    return (
+      <div className="space-y-4">
+        <{{pascalCase name}} 
+          disabled={disabled}
+          onClick={() => setCount(c => c + 1)}
+          {{#if (eq styling 'tailwind-cva')}}
+          variant={count > 5 ? 'secondary' : 'default'}
+          {{/if}}
+        >
+          Clicked {count} times
+        </{{pascalCase name}}>
+        
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setCount(0)}
+            className="px-3 py-1 text-sm bg-gray-100 rounded"
+          >
+            Reset Count
+          </button>
+          <button 
+            onClick={() => setDisabled(!disabled)}
+            className="px-3 py-1 text-sm bg-gray-100 rounded"
+          >
+            {disabled ? 'Enable' : 'Disable'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+};
+
+/**
+ * Custom styling example
+ */
+export const CustomStyling: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <{{pascalCase name}} className="bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+        Custom Gradient Background
+      </{{pascalCase name}}>
+      
+      <{{pascalCase name}} className="border-2 border-dashed border-blue-300 bg-blue-50">
+        Custom Border Style
+      </{{pascalCase name}}>
+      
+      <{{pascalCase name}} className="rounded-full px-6">
+        Rounded Pill Shape
+      </{{pascalCase name}}>
+    </div>
+  )
+};
+
+/**
+ * Loading state example
+ */
+export const LoadingState: Story = {
+  render: () => {
+    const [loading, setLoading] = React.useState(false);
+
+    const handleClick = () => {
+      setLoading(true);
+      setTimeout(() => setLoading(false), 2000);
+    };
+
+    return (
+      <{{pascalCase name}} 
+        disabled={loading}
+        onClick={handleClick}
+        className="min-w-32"
+      >
+        {loading ? (
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            Loading...
+          </div>
+        ) : (
+          'Click to Load'
+        )}
+      </{{pascalCase name}}>
+    );
+  }
+};
+
+/**
+ * Playground story for testing different combinations
+ */
+export const Playground: Story = {
+  args: {
+    children: 'Playground {{pascalCase name}}',
+  },
+  argTypes: {
+    children: {
+      control: 'text'
+    }
+  }
+};

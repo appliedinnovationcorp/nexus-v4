@@ -1,0 +1,304 @@
+{{#if (includes features 'typescript')}}
+import * as React from 'react';
+{{#if (eq styling 'tailwind-cva')}}
+import { type VariantProps } from 'class-variance-authority';
+{{/if}}
+
+/**
+ * Props for the {{pascalCase name}} component
+ */
+export interface {{pascalCase name}}Props extends React.HTMLAttributes<HTMLDivElement>{{#if (eq styling 'tailwind-cva')}}, VariantProps<typeof {{camelCase name}}Variants>{{/if}} {
+  /**
+   * The content to display inside the {{name}}
+   */
+  children?: React.ReactNode;
+  
+  /**
+   * Additional CSS class name
+   */
+  className?: string;
+  
+  /**
+   * Whether the {{name}} is disabled
+   * @default false
+   */
+  disabled?: boolean;
+  
+  {{#if (includes features 'form')}}
+  /**
+   * The name attribute for form elements
+   */
+  name?: string;
+  
+  /**
+   * The value of the form element
+   */
+  value?: string;
+  
+  /**
+   * Callback fired when the value changes
+   */
+  onChange?: (value: string) => void;
+  
+  /**
+   * Whether the field is required
+   * @default false
+   */
+  required?: boolean;
+  
+  /**
+   * Error message to display
+   */
+  error?: string;
+  {{/if}}
+  
+  {{#if (includes features 'analytics')}}
+  /**
+   * Analytics tracking properties
+   */
+  trackingProps?: {
+    /**
+     * The area/section where this component is used
+     */
+    area?: string;
+    /**
+     * The action being tracked
+     */
+    action?: string;
+    /**
+     * Additional label for the tracked event
+     */
+    label?: string;
+    /**
+     * Custom properties to include in tracking
+     */
+    customProps?: Record<string, any>;
+  };
+  {{/if}}
+  
+  {{#if (includes features 'a11y')}}
+  /**
+   * Accessible label for screen readers
+   */
+  'aria-label'?: string;
+  
+  /**
+   * ID of element that describes this component
+   */
+  'aria-describedby'?: string;
+  
+  /**
+   * ID of element that labels this component
+   */
+  'aria-labelledby'?: string;
+  {{/if}}
+}
+
+{{#if (eq type 'compound')}}
+/**
+ * Context value for compound {{pascalCase name}} component
+ */
+export interface {{pascalCase name}}ContextValue {
+  /**
+   * Whether the component is disabled
+   */
+  disabled: boolean;
+  
+  {{#if (eq styling 'tailwind-cva')}}
+  /**
+   * The visual variant of the component
+   */
+  variant: string;
+  {{/if}}
+  
+  {{#if (includes features 'form')}}
+  /**
+   * The current value
+   */
+  value?: string;
+  
+  /**
+   * Callback to update the value
+   */
+  onChange?: (value: string) => void;
+  
+  /**
+   * Whether the field has an error
+   */
+  hasError?: boolean;
+  {{/if}}
+}
+
+/**
+ * Props for {{pascalCase name}}Header component
+ */
+export interface {{pascalCase name}}HeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * The content to display in the header
+   */
+  children?: React.ReactNode;
+  
+  /**
+   * Additional CSS class name
+   */
+  className?: string;
+}
+
+/**
+ * Props for {{pascalCase name}}Content component
+ */
+export interface {{pascalCase name}}ContentProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * The content to display
+   */
+  children?: React.ReactNode;
+  
+  /**
+   * Additional CSS class name
+   */
+  className?: string;
+}
+{{/if}}
+
+{{#if (includes features 'form')}}
+/**
+ * Validation result for form fields
+ */
+export interface ValidationResult {
+  /**
+   * Whether the validation passed
+   */
+  isValid: boolean;
+  
+  /**
+   * Error message if validation failed
+   */
+  error?: string;
+  
+  /**
+   * Additional validation metadata
+   */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Form field configuration
+ */
+export interface FieldConfig {
+  /**
+   * Field name
+   */
+  name: string;
+  
+  /**
+   * Field label
+   */
+  label: string;
+  
+  /**
+   * Whether the field is required
+   */
+  required?: boolean;
+  
+  /**
+   * Validation function
+   */
+  validate?: (value: string) => ValidationResult;
+  
+  /**
+   * Default value
+   */
+  defaultValue?: string;
+}
+{{/if}}
+
+{{#if (includes features 'analytics')}}
+/**
+ * Analytics event data
+ */
+export interface AnalyticsEvent {
+  /**
+   * Event name
+   */
+  name: string;
+  
+  /**
+   * Event properties
+   */
+  properties: Record<string, any>;
+  
+  /**
+   * Timestamp of the event
+   */
+  timestamp: Date;
+  
+  /**
+   * User context
+   */
+  context?: {
+    userId?: string;
+    sessionId?: string;
+    area?: string;
+  };
+}
+{{/if}}
+
+/**
+ * Theme configuration for {{pascalCase name}}
+ */
+export interface {{pascalCase name}}Theme {
+  /**
+   * Base styles
+   */
+  base: string;
+  
+  /**
+   * Variant styles
+   */
+  variants: {
+    [key: string]: string;
+  };
+  
+  /**
+   * Size styles
+   */
+  sizes: {
+    [key: string]: string;
+  };
+  
+  /**
+   * State styles
+   */
+  states: {
+    disabled: string;
+    hover: string;
+    focus: string;
+    active: string;
+  };
+}
+
+/**
+ * Configuration options for {{pascalCase name}}
+ */
+export interface {{pascalCase name}}Config {
+  /**
+   * Default variant
+   */
+  defaultVariant: string;
+  
+  /**
+   * Default size
+   */
+  defaultSize: string;
+  
+  /**
+   * Whether to enable animations
+   */
+  enableAnimations: boolean;
+  
+  /**
+   * Custom theme overrides
+   */
+  theme?: Partial<{{pascalCase name}}Theme>;
+}
+{{/if}}

@@ -1,0 +1,53 @@
+/**
+ * {{pascalCase name}} Component
+ * 
+ * {{description}}
+ * 
+ * @example
+ * ```tsx
+ * import { {{pascalCase name}} } from '@nexus/ui';
+ * 
+ * function App() {
+ *   return (
+ *     <{{pascalCase name}}>
+ *       Your content here
+ *     </{{pascalCase name}}>
+ *   );
+ * }
+ * ```
+ */
+
+// Main component export
+export { {{pascalCase name}} } from './{{pascalCase name}}';
+
+{{#if (eq type 'compound')}}
+// Compound component parts
+export { {{pascalCase name}}Header, {{pascalCase name}}Content } from './{{pascalCase name}}';
+
+// Context hook
+export { use{{pascalCase name}} } from './{{pascalCase name}}';
+{{/if}}
+
+{{#if (includes features 'typescript')}}
+// Type exports
+export type { 
+  {{pascalCase name}}Props,
+  {{#if (eq type 'compound')}}
+  {{pascalCase name}}ContextValue,
+  {{pascalCase name}}HeaderProps,
+  {{pascalCase name}}ContentProps,
+  {{/if}}
+  {{#if (includes features 'form')}}
+  ValidationResult,
+  FieldConfig,
+  {{/if}}
+  {{#if (includes features 'analytics')}}
+  AnalyticsEvent,
+  {{/if}}
+  {{pascalCase name}}Theme,
+  {{pascalCase name}}Config
+} from './{{pascalCase name}}.types';
+{{/if}}
+
+// Default export for convenience
+export { {{pascalCase name}} as default } from './{{pascalCase name}}';

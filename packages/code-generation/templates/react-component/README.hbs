@@ -1,0 +1,378 @@
+# {{pascalCase name}}
+
+{{description}}
+
+## Installation
+
+```bash
+npm install @nexus/ui
+# or
+pnpm add @nexus/ui
+# or
+yarn add @nexus/ui
+```
+
+## Usage
+
+### Basic Usage
+
+```tsx
+import { {{pascalCase name}} } from '@nexus/ui';
+
+function App() {
+  return (
+    <{{pascalCase name}}>
+      Your content here
+    </{{pascalCase name}}>
+  );
+}
+```
+
+{{#if (eq styling 'tailwind-cva')}}
+### Variants
+
+The {{pascalCase name}} component supports multiple visual variants:
+
+```tsx
+<{{pascalCase name}} variant="default">Default variant</{{pascalCase name}}>
+<{{pascalCase name}} variant="secondary">Secondary variant</{{pascalCase name}}>
+<{{pascalCase name}} variant="outline">Outline variant</{{pascalCase name}}>
+<{{pascalCase name}} variant="ghost">Ghost variant</{{pascalCase name}}>
+```
+
+### Sizes
+
+Different sizes are available:
+
+```tsx
+<{{pascalCase name}} size="sm">Small</{{pascalCase name}}>
+<{{pascalCase name}} size="default">Default</{{pascalCase name}}>
+<{{pascalCase name}} size="lg">Large</{{pascalCase name}}>
+```
+{{/if}}
+
+### Disabled State
+
+```tsx
+<{{pascalCase name}} disabled>
+  Disabled component
+</{{pascalCase name}}>
+```
+
+{{#if (includes features 'form')}}
+### Form Integration
+
+The {{pascalCase name}} component can be used in forms:
+
+```tsx
+import { useState } from 'react';
+import { {{pascalCase name}} } from '@nexus/ui';
+
+function FormExample() {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+
+  const handleChange = (newValue: string) => {
+    setValue(newValue);
+    // Validation logic
+    if (newValue.length < 3) {
+      setError('Value must be at least 3 characters');
+    } else {
+      setError('');
+    }
+  };
+
+  return (
+    <{{pascalCase name}}
+      name="example-field"
+      value={value}
+      onChange={handleChange}
+      required
+      error={error}
+    >
+      Form Field
+    </{{pascalCase name}}>
+  );
+}
+```
+{{/if}}
+
+{{#if (includes features 'analytics')}}
+### Analytics Integration
+
+Track user interactions with the component:
+
+```tsx
+<{{pascalCase name}}
+  trackingProps={{
+    area: 'header',
+    action: 'navigation_click',
+    label: 'main_menu'
+  }}
+>
+  Tracked Component
+</{{pascalCase name}}>
+```
+{{/if}}
+
+{{#if (includes features 'a11y')}}
+### Accessibility
+
+The component includes built-in accessibility features:
+
+```tsx
+<{{pascalCase name}}
+  aria-label="Descriptive label"
+  aria-describedby="help-text"
+>
+  Accessible Component
+</{{pascalCase name}}>
+```
+{{/if}}
+
+{{#if (eq type 'compound')}}
+### Compound Component
+
+The {{pascalCase name}} can be used as a compound component:
+
+```tsx
+import { {{pascalCase name}}, {{pascalCase name}}Header, {{pascalCase name}}Content } from '@nexus/ui';
+
+function CompoundExample() {
+  return (
+    <{{pascalCase name}}>
+      <{{pascalCase name}}Header>
+        <h3>Header Title</h3>
+        <button>Close</button>
+      </{{pascalCase name}}Header>
+      <{{pascalCase name}}Content>
+        <p>Main content goes here</p>
+      </{{pascalCase name}}Content>
+    </{{pascalCase name}}>
+  );
+}
+```
+
+### Using the Context Hook
+
+Access the component's context in child components:
+
+```tsx
+import { use{{pascalCase name}} } from '@nexus/ui';
+
+function ChildComponent() {
+  const { disabled, variant } = use{{pascalCase name}}();
+  
+  return (
+    <div>
+      Status: {disabled ? 'Disabled' : 'Enabled'}
+      Variant: {variant}
+    </div>
+  );
+}
+```
+{{/if}}
+
+## API Reference
+
+### {{pascalCase name}}Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | - | The content to display inside the component |
+| `className` | `string` | - | Additional CSS class name |
+| `disabled` | `boolean` | `false` | Whether the component is disabled |
+{{#if (eq styling 'tailwind-cva')}}
+| `variant` | `'default' \| 'secondary' \| 'outline' \| 'ghost'` | `'default'` | The visual variant |
+| `size` | `'sm' \| 'default' \| 'lg'` | `'default'` | The size of the component |
+{{/if}}
+{{#if (includes features 'form')}}
+| `name` | `string` | - | The name attribute for form elements |
+| `value` | `string` | - | The value of the form element |
+| `onChange` | `(value: string) => void` | - | Callback fired when the value changes |
+| `required` | `boolean` | `false` | Whether the field is required |
+| `error` | `string` | - | Error message to display |
+{{/if}}
+{{#if (includes features 'analytics')}}
+| `trackingProps` | `AnalyticsProps` | - | Analytics tracking configuration |
+{{/if}}
+{{#if (includes features 'a11y')}}
+| `aria-label` | `string` | - | Accessible label for screen readers |
+| `aria-describedby` | `string` | - | ID of element that describes this component |
+| `aria-labelledby` | `string` | - | ID of element that labels this component |
+{{/if}}
+
+{{#if (eq type 'compound')}}
+### {{pascalCase name}}HeaderProps
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | - | The content to display in the header |
+| `className` | `string` | - | Additional CSS class name |
+
+### {{pascalCase name}}ContentProps
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `children` | `React.ReactNode` | - | The content to display |
+| `className` | `string` | - | Additional CSS class name |
+{{/if}}
+
+## Styling
+
+{{#if (eq styling 'styled-components')}}
+The component uses styled-components for styling. You can customize the appearance by:
+
+1. **CSS Custom Properties**: Override CSS variables
+```css
+:root {
+  --primary-bg: #your-color;
+  --primary-text: #your-text-color;
+}
+```
+
+2. **Styled Components Theme**: Provide a theme to your styled-components ThemeProvider
+
+3. **Custom Styled Components**: Extend the base styled components
+```tsx
+import styled from 'styled-components';
+import { {{pascalCase name}} } from '@nexus/ui';
+
+const CustomComponent = styled({{pascalCase name}})`
+  /* Your custom styles */
+`;
+```
+{{/if}}
+
+{{#if (eq styling 'css-modules')}}
+The component uses CSS Modules for styling. You can customize by:
+
+1. **CSS Custom Properties**: Override CSS variables
+```css
+:root {
+  --primary-bg: #your-color;
+  --primary-text: #your-text-color;
+}
+```
+
+2. **Custom CSS Classes**: Add your own CSS classes via the `className` prop
+
+3. **CSS Module Overrides**: Import and extend the CSS module styles
+{{/if}}
+
+{{#if (eq styling 'tailwind-cva')}}
+The component uses Tailwind CSS with class-variance-authority (CVA) for styling:
+
+1. **Tailwind Classes**: Add custom classes via the `className` prop
+```tsx
+<{{pascalCase name}} className="bg-gradient-to-r from-blue-500 to-purple-600">
+  Custom styling
+</{{pascalCase name}}>
+```
+
+2. **CSS Custom Properties**: Override design tokens
+```css
+:root {
+  --primary: 220 14% 96%;
+  --primary-foreground: 220.9 39.3% 11%;
+}
+```
+{{/if}}
+
+## Examples
+
+### Interactive Example
+
+```tsx
+import { useState } from 'react';
+import { {{pascalCase name}} } from '@nexus/ui';
+
+function InteractiveExample() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <{{pascalCase name}} 
+      onClick={() => setCount(c => c + 1)}
+      {{#if (eq styling 'tailwind-cva')}}
+      variant={count > 5 ? 'secondary' : 'default'}
+      {{/if}}
+    >
+      Clicked {count} times
+    </{{pascalCase name}}>
+  );
+}
+```
+
+### Loading State
+
+```tsx
+import { useState } from 'react';
+import { {{pascalCase name}} } from '@nexus/ui';
+
+function LoadingExample() {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    setLoading(false);
+  };
+
+  return (
+    <{{pascalCase name}} 
+      disabled={loading}
+      onClick={handleClick}
+    >
+      {loading ? 'Loading...' : 'Click me'}
+    </{{pascalCase name}}>
+  );
+}
+```
+
+## Testing
+
+The component includes comprehensive test coverage. Run tests with:
+
+```bash
+npm test
+# or
+pnpm test
+# or
+yarn test
+```
+
+### Testing Utilities
+
+```tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import { {{pascalCase name}} } from '@nexus/ui';
+
+test('renders component correctly', () => {
+  render(<{{pascalCase name}}>Test content</{{pascalCase name}}>);
+  expect(screen.getByText('Test content')).toBeInTheDocument();
+});
+```
+
+## Storybook
+
+View the component in Storybook for interactive examples and documentation:
+
+```bash
+npm run storybook
+# or
+pnpm storybook
+# or
+yarn storybook
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
